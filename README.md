@@ -14,12 +14,12 @@
 
 - ✅ **Complete API Implementation** - Full coverage of Technitium DNS Server API
 - ✅ **Authentication Management** - Secure token-based authentication
-- ✅ **Zone Management** - Create, delete, enable/disable DNS zones
-- ✅ **Record Management** - Add, update, delete DNS records (A, AAAA, CNAME, MX, TXT, NS, PTR, SRV, CAA)
+- ✅ **Zone Management** - Create, delete, enable/disable, import, and export DNS zones
+- ✅ **Record Management** - Add, update, import, delete DNS records (A, AAAA, CNAME, MX, TXT, NS, PTR, SRV, CAA)
 - ✅ **Server Administration** - Statistics, cache management, queries
 - ✅ **Interactive Menu** - User-friendly menu when run without arguments
 - ✅ **Configuration Storage** - Persistent configuration in `~/.tdns-mgr.conf`
-- ✅ **Colored Output** - Easy-to-read colored terminal output
+- ✅ **Technitium DNS Server Version** - Script developed and tested against Technitium DNS Server Version 14.3
 - ✅ **Error Handling** - Comprehensive error checking and reporting
 
 ---
@@ -34,9 +34,6 @@
 - `awk`
 
 The script checks for these dependencies on execution and can attempt to install them automatically on supported systems (Debian/Ubuntu, RHEL/CentOS, Alpine, Arch, OpenSUSE, MacOS via Homebrew).
-
-
-The script is automatically installed in HoloConsole and available in the PATH.
 
 ### Manual Installation
 
