@@ -445,6 +445,8 @@ example.com,www,A,192.168.1.100
 example.com,mail,CNAME,example.com
 ```
 
+Example file: [new-dns-records.csv](new-dns-records.csv)
+
 **Output**: JSON object with results.
 ```json
 {
