@@ -10,6 +10,8 @@
 
 `tdns-mgr.sh` is a comprehensive command-line client for managing Technitium DNS Server via its REST API. It provides full functionality for DNS zone management, record manipulation, and server administration.
 
+**NOTE**: I found another CLI tool after I had written this one. It's called tdns CLI and is available at https://github.com/mbevc1/tdns. I have not used that one, but it appears to be written in Go.
+
 ### Features
 
 - ✅ **Complete API Implementation** - Full coverage of Technitium DNS Server API
