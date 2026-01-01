@@ -1,0 +1,5 @@
+zone,name,type,value
+# First line is header, DO NOT REMOVE OR CHANGE. Lines starting with # are comments and will be ignored.
+example.com,www,CNAME,example.com
+example.com,mail,CNAME,example.com
+example.com,router,A,192.168.1.1
