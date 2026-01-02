@@ -14,7 +14,7 @@
 
 ### Features
 
-- ✅ **Complete API Implementation** - Full coverage of Technitium DNS Server API
+- ✅ **REST API Implementation** - Partial coverage of Technitium DNS Server API
 - ✅ **Authentication Management** - Secure token-based authentication
 - ✅ **Zone Management** - Create, delete, enable/disable, import, and export DNS zones
 - ✅ **Record Management** - Add, update, import, delete DNS records (A, AAAA, CNAME, MX, TXT, NS, PTR, SRV, CAA)
