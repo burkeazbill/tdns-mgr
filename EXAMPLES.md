@@ -852,7 +852,7 @@ fi
 
 ---
 
-## 13. API Endpoints Reference
+## API Endpoints Reference
 
 This section provides a complete mapping of all Technitium DNS Server API endpoints to their corresponding `tdns-mgr` commands, demonstrating 100% API coverage.
 
