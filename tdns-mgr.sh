@@ -262,6 +262,36 @@ cmd_change_password() {
     fi
 }
 
+cmd_check_update() {
+    check_auth
+    print_info "Checking for DNS server updates..."
+    
+    local response=$(api_get "user/checkForUpdate" "token=${DNS_TOKEN}")
+    
+    if echo "$response" | grep -q '"status":"ok"'; then
+        local update_available=$(echo "$response" | jq -r '.response.updateAvailable // false')
+        local current_version=$(echo "$response" | jq -r '.response.currentVersion // "unknown"')
+        local update_version=$(echo "$response" | jq -r '.response.updateVersion // "unknown"')
+        
+        if [[ "$update_available" == "true" ]]; then
+            print_warning "Update available!"
+            print_info "Current version: $current_version"
+            print_info "Available version: $update_version"
+        else
+            print_success "Server is up to date"
+            print_info "Current version: $current_version"
+        fi
+        
+        # In quiet mode, just output the JSON
+        if [[ "$QUIET" == "true" ]]; then
+            echo "$response" | jq '.'
+        fi
+    else
+        print_error "Failed to check for updates"
+        echo "$response" | jq '.' 2>/dev/null || echo "$response"
+    fi
+}
+
 ################################################################################
 # Zone Management Functions
 ################################################################################
@@ -1960,7 +1990,7 @@ show_summary() {
     echo -e "    --verbose                       Show verbose help with all commands"
     echo -e ""
     echo -e "${BLUE}AVAILABLE HELP TOPICS:${NC}"
-    echo -e "    Authentication                  Login, logout, password, config management"
+    echo -e "    Authentication                  Login, logout, password, updates, config"
     echo -e "    DNS                             Zones, records, import/export, queries"
     echo -e "    Cluster                         Cluster initialization, joining, syncing"
     echo -e "    Administration                  Users, groups, permissions, sessions, tokens"
@@ -2006,6 +2036,7 @@ show_help_authentication() {
     echo -e "    login                           Login to DNS server"
     echo -e "    logout                          Logout from DNS server"
     echo -e "    change-password <new_pass>      Change user password"
+    echo -e "    check-update                    Check for DNS server updates"
     echo -e "    config [show|set]               Show or set configuration"
     echo -e ""
     echo -e "${YELLOW}EXAMPLES:${NC}"
@@ -2017,6 +2048,9 @@ show_help_authentication() {
     echo -e ""
     echo -e "    ${GREEN}# Change password${NC}"
     echo -e "    tdns-mgr.sh change-password newStrongPassword123"
+    echo -e ""
+    echo -e "    ${GREEN}# Check for server updates${NC}"
+    echo -e "    tdns-mgr.sh check-update"
     echo -e ""
     echo -e "    ${GREEN}# Show current configuration${NC}"
     echo -e "    tdns-mgr.sh config show"
@@ -2467,6 +2501,9 @@ main() {
             ;;
         change-password)
             cmd_change_password "$@"
+            ;;
+        check-update)
+            cmd_check_update "$@"
             ;;
         config)
             cmd_config "$@"
