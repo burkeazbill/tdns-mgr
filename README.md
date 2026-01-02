@@ -150,6 +150,7 @@ The directory is automatically created if it doesn't exist.
 ```bash
 DNS_SERVER="localhost"
 DNS_PORT="5380"
+DNS_PROTOCOL="https"
 DNS_TOKEN="your-auth-token-here"
 DNS_USER="admin"
 ```
@@ -161,12 +162,24 @@ You can override configuration using environment variables (highest priority):
 ```bash
 export DNS_SERVER="dns.example.com"
 export DNS_PORT="5380"
+export DNS_PROTOCOL="https"  # Use "http" or "https" (default: https)
 export DNS_USER="admin"
 export DNS_PASS="password"  # For non-interactive login
 export DNS_TOKEN="token"     # Skip login if token is set
 ```
 
 ### View Current Configuration
+
+### SSL Notes
+
+- The script does not validate SSL certificates by default (curl's standard behavior)
+- To ignore SSL certificate errors for self-signed certificates, users can set:
+
+  ```bash
+  alias tdns-mgr='CURL_CA_BUNDLE="" tdns-mgr'
+  ```
+
+  Or modify curl commands in the script to add `-k` flag if needed
 
 ```bash
 # Show which config file is being used and current values

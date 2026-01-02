@@ -151,6 +151,9 @@ tdns-mgr config set server dns.example.com
 # Set port
 tdns-mgr config set port 5380
 
+# Set protocol (http or https)
+tdns-mgr config set protocol https
+
 # Set username
 tdns-mgr config set user admin
 ```
@@ -167,8 +170,12 @@ The script checks for configuration in the following order:
 ```bash
 # Using environment variables (highest priority)
 export DNS_SERVER="dns.example.com"
+export DNS_PROTOCOL="https"
 export DNS_USER="admin"
 tdns-mgr list-zones
+
+# For HTTP connections (not recommended for production)
+export DNS_PROTOCOL="http"
 
 # The config file will be automatically created when you login or use 'config set'
 # It will be saved to: ~/.config/tdns-mgr/.tdns-mgr.conf
@@ -881,7 +888,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### User Session API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/user/login` | POST | `login` | [Authentication](#authentication) |
 | `/api/user/logout` | POST | `logout` | [Authentication](#authentication) |
 | `/api/user/changePassword` | POST | `change-password` | [Authentication](#authentication) |
@@ -891,14 +898,14 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### User Profile API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/user/profile/get` | GET | `admin-user-list` | [Administration](#administration-users-groups-permissions) |
 | `/api/user/profile/set` | POST | User management | [Administration](#administration-users-groups-permissions) |
 
 ### Admin User API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/admin/users/list` | GET | `admin-user-list` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/users/create` | POST | `admin-user-create` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/users/get` | GET | `admin-user-list` | [Administration](#administration-users-groups-permissions) |
@@ -908,7 +915,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Admin Group API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/admin/groups/list` | GET | `admin-group-list` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/groups/create` | POST | `admin-group-create` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/groups/get` | GET | `admin-group-list` | [Administration](#administration-users-groups-permissions) |
@@ -918,7 +925,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Admin Permissions API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/admin/permissions/list` | GET | `admin-perm-list` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/permissions/get` | GET | `admin-perm-list` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/permissions/set` | POST | Permission management | [Administration](#administration-users-groups-permissions) |
@@ -926,7 +933,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Admin Sessions API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/admin/sessions/list` | GET | `admin-session-list` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/sessions/delete` | POST | `admin-session-delete` | [Administration](#administration-users-groups-permissions) |
 | `/api/admin/sessions/createToken` | POST | `admin-token-create` | [Administration](#administration-users-groups-permissions) |
@@ -934,7 +941,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Zones API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/zones/list` | GET | `list-zones` | [DNS Zones](#dns-zones--records) |
 | `/api/zones/create` | POST | `create-zone` | [DNS Zones](#dns-zones--records) |
 | `/api/zones/enable` | POST | `enable-zone` | [DNS Zones](#dns-zones--records) |
@@ -951,7 +958,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Zone Records API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/zones/records/get` | GET | `list-records` | [DNS Records](#dns-zones--records) |
 | `/api/zones/records/add` | POST | `add-record` | [DNS Records](#dns-zones--records) |
 | `/api/zones/records/update` | POST | `update-record` | [DNS Records](#dns-zones--records) |
@@ -960,14 +967,14 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Zone Import/Export API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/zones/export` | GET | `export-zone` | [DNS Zones](#dns-zones--records) |
 | `/api/zones/import` | POST | `import-zone` | [DNS Zones](#dns-zones--records) |
 
 ### Allowed/Blocked Zones API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/zones/allowed/list` | GET | `allowed-list` | [Blocked & Allowed Zones](#blocked--allowed-zones) |
 | `/api/zones/allowed/add` | POST | `allowed-add` | [Blocked & Allowed Zones](#blocked--allowed-zones) |
 | `/api/zones/allowed/delete` | POST | `allowed-delete` | [Blocked & Allowed Zones](#blocked--allowed-zones) |
@@ -980,7 +987,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Cache API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/cache/list` | GET | Query operations | [DNS Client](#dns-client) |
 | `/api/cache/delete` | POST | Cache management | [DNS Zones](#dns-zones--records) |
 | `/api/cache/flush` | POST | `flush-cache` | [DNS Zones](#dns-zones--records) |
@@ -988,13 +995,13 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### DNS Client API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/dnsClient/resolve` | POST | `client-resolve` | [DNS Client](#dns-client) |
 
 ### Settings API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/settings/get` | GET | `settings-get` | [Advanced Settings](#advanced-zone--server-settings) |
 | `/api/settings/set` | POST | `settings-set` | [Advanced Settings](#advanced-zone--server-settings) |
 | `/api/settings/backup` | GET | `export-zones` | [DNS Zones](#dns-zones--records) |
@@ -1004,7 +1011,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### DHCP API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/dhcp/scopes/list` | GET | `dhcp-scope-list` | [DHCP Management](#dhcp-server-management) |
 | `/api/dhcp/scopes/get` | GET | `dhcp-scope-get` | [DHCP Management](#dhcp-server-management) |
 | `/api/dhcp/scopes/set` | POST | `dhcp-scope-set` | [DHCP Management](#dhcp-server-management) |
@@ -1019,7 +1026,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Apps API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/apps/list` | GET | `app-list` | [Apps Management](#apps-management) |
 | `/api/apps/listStoreApps` | GET | `app-list store` | [Apps Management](#apps-management) |
 | `/api/apps/downloadAndInstall` | POST | `app-install` | [Apps Management](#apps-management) |
@@ -1031,7 +1038,7 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Logs API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/logs/list` | GET | `log-list` | [Logging & Stats](#logging--stats) |
 | `/api/logs/download` | GET | `log-download` | [Logging & Stats](#logging--stats) |
 | `/api/logs/query` | GET | `log-query` | [Logging & Stats](#logging--stats) |
@@ -1039,14 +1046,14 @@ This section provides a complete mapping of all Technitium DNS Server API endpoi
 ### Dashboard Stats API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/dashboard/stats/get` | GET | `server-stats` | [Logging & Stats](#logging--stats) |
 | `/api/dashboard/stats/getTop` | GET | `stats-top` | [Logging & Stats](#logging--stats) |
 
 ### Cluster API
 
 | Endpoint | Method | Command | Reference |
-|----------|--------|---------|-----------|
+| ---------- | -------- | --------- | ----------- |
 | `/api/cluster/status` | GET | `cluster-status` | [Cluster Management](#cluster-management) |
 | `/api/cluster/initialize` | POST | `cluster-init` | [Cluster Management](#cluster-management) |
 | `/api/cluster/join` | POST | `cluster-join` | [Cluster Management](#cluster-management) |

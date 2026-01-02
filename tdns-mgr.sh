@@ -48,6 +48,7 @@ SCRIPT_CONFIG_FILE="${SCRIPT_DIR}/.tdns-mgr.conf"
 # Default values
 DNS_SERVER="${DNS_SERVER:-localhost}"
 DNS_PORT="${DNS_PORT:-5380}"
+DNS_PROTOCOL="${DNS_PROTOCOL:-https}"
 DNS_TOKEN="${DNS_TOKEN:-}"
 DNS_USER="${DNS_USER:-admin}"
 DNS_PASS="${DNS_PASS:-}"
@@ -137,6 +138,7 @@ save_config() {
     cat > "$USER_CONFIG_FILE" << EOF
 DNS_SERVER="$DNS_SERVER"
 DNS_PORT="$DNS_PORT"
+DNS_PROTOCOL="$DNS_PROTOCOL"
 DNS_TOKEN="$DNS_TOKEN"
 DNS_USER="$DNS_USER"
 EOF
@@ -155,7 +157,7 @@ EOF
 api_call() {
     local endpoint="$1"
     shift
-    local url="http://${DNS_SERVER}:${DNS_PORT}/api/${endpoint}"
+    local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/${endpoint}"
     
     if [[ -n "$DNS_TOKEN" ]]; then
         curl -s -X POST "$url" \
@@ -447,7 +449,7 @@ cmd_export_zone() {
     
     print_info "Exporting zone $zone to $file (BIND format)..."
     
-    local url="http://${DNS_SERVER}:${DNS_PORT}/api/zones/export?token=${DNS_TOKEN}&zone=${zone}&format=Bind"
+    local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/zones/export?token=${DNS_TOKEN}&zone=${zone}&format=Bind"
     
     if curl -s -f "$url" -o "$file"; then
         print_success "Zone exported to $file"
@@ -474,7 +476,7 @@ cmd_import_zone() {
     
     print_info "Importing zone $zone from $file..."
     
-    local url="http://${DNS_SERVER}:${DNS_PORT}/api/zones/import?token=${DNS_TOKEN}&zone=${zone}&overwrite=true"
+    local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/zones/import?token=${DNS_TOKEN}&zone=${zone}&overwrite=true"
     
     local response=$(curl -s -X POST "$url" -F "file=@$file")
     
@@ -498,7 +500,7 @@ cmd_export_zones() {
     
     print_info "Exporting all zones to $file..."
     
-    local url="http://${DNS_SERVER}:${DNS_PORT}/api/settings/backup?token=${DNS_TOKEN}&zones=true"
+    local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/settings/backup?token=${DNS_TOKEN}&zones=true"
     
     if curl -s -f "$url" -o "$file"; then
         print_success "All zones exported to $file"
@@ -532,7 +534,7 @@ cmd_import_zones() {
     
     print_info "Importing zones from $file..."
     
-    local url="http://${DNS_SERVER}:${DNS_PORT}/api/settings/restore?token=${DNS_TOKEN}&zones=true&deleteExistingFiles=true"
+    local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/settings/restore?token=${DNS_TOKEN}&zones=true&deleteExistingFiles=true"
     
     local response=$(curl -s -X POST "$url" -F "file=@$file")
     
@@ -845,7 +847,7 @@ cmd_import_records() {
         esac
         
         # Call API directly
-        local url="http://${DNS_SERVER}:${DNS_PORT}/api/zones/records/add"
+        local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/zones/records/add"
         local response=""
         
         if [[ -n "$DNS_TOKEN" ]]; then
@@ -895,10 +897,10 @@ cmd_server_stats() {
 cmd_server_status() {
     print_info "Checking server status..."
     
-    if curl -s -f "http://${DNS_SERVER}:${DNS_PORT}" > /dev/null 2>&1; then
-        print_success "DNS Server is running at ${DNS_SERVER}:${DNS_PORT}"
+    if curl -s -f "${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}" > /dev/null 2>&1; then
+        print_success "DNS Server is running at ${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}"
     else
-        print_error "DNS Server is not accessible at ${DNS_SERVER}:${DNS_PORT}"
+        print_error "DNS Server is not accessible at ${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}"
         exit 1
     fi
 }
@@ -1476,7 +1478,7 @@ cmd_app_install() {
         fi
     elif [[ -f "$url" ]]; then
         print_info "Uploading and installing app: $name from $url"
-        local api_url="http://${DNS_SERVER}:${DNS_PORT}/api/apps/install?token=${DNS_TOKEN}&name=${name}"
+        local api_url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/apps/install?token=${DNS_TOKEN}&name=${name}"
         local response=$(curl -s -X POST "$api_url" -F "file=@$url")
         if echo "$response" | grep -q '"status":"ok"'; then
             print_success "App uploaded and installed successfully"
@@ -1729,7 +1731,7 @@ cmd_log_download() {
     
     print_info "Downloading log file: $file_name (Limit: ${limit}MB)"
     
-    local url="http://${DNS_SERVER}:${DNS_PORT}/api/logs/download?token=${DNS_TOKEN}&fileName=${file_name}&limit=${limit}"
+    local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/logs/download?token=${DNS_TOKEN}&fileName=${file_name}&limit=${limit}"
     
     if curl -s -f "$url" -o "$out_file"; then
         print_success "Log downloaded to $out_file"
@@ -1975,6 +1977,7 @@ cmd_config() {
             print_info "Current configuration:"
             echo "  Server: ${DNS_SERVER}"
             echo "  Port: ${DNS_PORT}"
+            echo "  Protocol: ${DNS_PROTOCOL}"
             echo "  User: ${DNS_USER}"
             echo "  Token: ${DNS_TOKEN:+[SET]}"
             echo "  Config file: ${CONFIG_FILE}"
@@ -1994,6 +1997,15 @@ cmd_config() {
                     save_config
                     print_success "Port set to: $value"
                     ;;
+                protocol)
+                    if [[ "$value" != "http" && "$value" != "https" ]]; then
+                        print_error "Protocol must be 'http' or 'https'"
+                        exit 1
+                    fi
+                    DNS_PROTOCOL="$value"
+                    save_config
+                    print_success "Protocol set to: $value"
+                    ;;
                 user)
                     DNS_USER="$value"
                     save_config
@@ -2001,7 +2013,7 @@ cmd_config() {
                     ;;
                 *)
                     print_error "Unknown config key: $key"
-                    print_info "Valid keys: server, port, user"
+                    print_info "Valid keys: server, port, protocol, user"
                     exit 1
                     ;;
             esac
@@ -2062,6 +2074,7 @@ show_summary() {
     echo -e "${CYAN}ENVIRONMENT VARIABLES:${NC}"
     echo -e "    DNS_SERVER      DNS server hostname/IP (default: localhost)"
     echo -e "    DNS_PORT        DNS server port (default: 5380)"
+    echo -e "    DNS_PROTOCOL    Protocol to use: http or https (default: https)"
     echo -e "    DNS_USER        Username (default: admin)"
     echo -e "    DNS_PASS        Password (for non-interactive login)"
     echo -e "    DNS_TOKEN       API token (set after login)"
@@ -2420,6 +2433,7 @@ show_help_verbose() {
     echo -e "${CYAN}ENVIRONMENT VARIABLES:${NC}"
     echo -e "    DNS_SERVER      DNS server hostname/IP (default: localhost)"
     echo -e "    DNS_PORT        DNS server port (default: 5380)"
+    echo -e "    DNS_PROTOCOL    Protocol to use: http or https (default: https)"
     echo -e "    DNS_USER        Username (default: admin)"
     echo -e "    DNS_PASS        Password (for non-interactive login)"
     echo -e "    DNS_TOKEN       API token (set after login)"
