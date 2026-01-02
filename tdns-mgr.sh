@@ -37,12 +37,13 @@ fi
 # Script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-# Configuration file
-if [[ -f "${SCRIPT_DIR}/.tdns-mgr.conf" ]]; then
-    CONFIG_FILE="${SCRIPT_DIR}/.tdns-mgr.conf"
-else
-    CONFIG_FILE="${HOME}/.tdns-mgr.conf"
-fi
+# Configuration file locations (in order of precedence)
+# 1. User config directory (default save location)
+USER_CONFIG_FILE="${HOME}/.config/tdns-mgr/.tdns-mgr.conf"
+# 2. System-wide config
+SYSTEM_CONFIG_FILE="/etc/tdns-mgr/.tdns-mgr.conf"
+# 3. Script directory (backward compatibility)
+SCRIPT_CONFIG_FILE="${SCRIPT_DIR}/.tdns-mgr.conf"
 
 # Default values
 DNS_SERVER="${DNS_SERVER:-localhost}"
@@ -51,6 +52,9 @@ DNS_TOKEN="${DNS_TOKEN:-}"
 DNS_USER="${DNS_USER:-admin}"
 DNS_PASS="${DNS_PASS:-}"
 QUIET="${QUIET:-false}"
+
+# This will be set by load_config to the actual file that was loaded
+CONFIG_FILE="${USER_CONFIG_FILE}"
 
 ################################################################################
 # Helper Functions
@@ -90,22 +94,61 @@ print_info() {
 
 # Load configuration
 load_config() {
-    if [[ -f "$CONFIG_FILE" ]]; then
+    # Configuration precedence order:
+    # 1. Command-line environment variables (already loaded as defaults above)
+    # 2. User config directory: ~/.config/tdns-mgr/.tdns-mgr.conf
+    # 3. System-wide config: /etc/tdns-mgr/.tdns-mgr.conf
+    # 4. Script directory: SCRIPT_DIR/.tdns-mgr.conf (backward compatibility)
+    
+    # Check user config directory
+    if [[ -f "$USER_CONFIG_FILE" ]]; then
         # shellcheck source=/dev/null
-        source "$CONFIG_FILE"
+        source "$USER_CONFIG_FILE"
+        CONFIG_FILE="$USER_CONFIG_FILE"
+    # Check system-wide config
+    elif [[ -f "$SYSTEM_CONFIG_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$SYSTEM_CONFIG_FILE"
+        CONFIG_FILE="$SYSTEM_CONFIG_FILE"
+    # Check script directory (backward compatibility)
+    elif [[ -f "$SCRIPT_CONFIG_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$SCRIPT_CONFIG_FILE"
+        CONFIG_FILE="$SCRIPT_CONFIG_FILE"
     fi
+    
+    # Note: Command-line arguments (environment variables) take precedence
+    # They are already set as defaults before this function is called
 }
 
 # Save configuration
 save_config() {
-    cat > "$CONFIG_FILE" << EOF
+    # Ensure the config directory exists
+    local config_dir=$(dirname "$USER_CONFIG_FILE")
+    if [[ ! -d "$config_dir" ]]; then
+        mkdir -p "$config_dir"
+        if [[ $? -ne 0 ]]; then
+            print_error "Failed to create config directory: $config_dir"
+            return 1
+        fi
+    fi
+    
+    # Save to user config file
+    cat > "$USER_CONFIG_FILE" << EOF
 DNS_SERVER="$DNS_SERVER"
 DNS_PORT="$DNS_PORT"
 DNS_TOKEN="$DNS_TOKEN"
 DNS_USER="$DNS_USER"
 EOF
-    chmod 600 "$CONFIG_FILE"
-    print_success "Configuration saved to $CONFIG_FILE"
+    
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to save configuration to $USER_CONFIG_FILE"
+        return 1
+    fi
+    
+    chmod 600 "$USER_CONFIG_FILE"
+    CONFIG_FILE="$USER_CONFIG_FILE"
+    print_success "Configuration saved to $USER_CONFIG_FILE"
 }
 
 # API call wrapper
@@ -2024,7 +2067,7 @@ show_summary() {
     echo -e "    DNS_TOKEN       API token (set after login)"
     echo -e ""
     echo -e "${CYAN}DOCUMENTATION:${NC}"
-    echo -e "    Configuration file: ~/.tdns-mgr.conf"
+    echo -e "    Config checked: CLI args, ~/.config/tdns-mgr/.tdns-mgr.conf, /etc/tdns-mgr/.tdns-mgr.conf, script/.tdns-mgr.conf"
     echo -e "    Full examples: EXAMPLES.md"
     echo -e "    API Reference: https://github.com/TechnitiumSoftware/DnsServer/blob/master/APIDOCS.md"
     echo -e ""
@@ -2382,7 +2425,9 @@ show_help_verbose() {
     echo -e "    DNS_TOKEN       API token (set after login)"
     echo -e ""
     echo -e "${CYAN}CONFIGURATION FILE:${NC}"
-    echo -e "    ~/.tdns-mgr.conf"
+    echo -e "    Checked in order: CLI args, ~/.config/tdns-mgr/.tdns-mgr.conf,"
+    echo -e "                      /etc/tdns-mgr/.tdns-mgr.conf, script/.tdns-mgr.conf"
+    echo -e "    Saved to: ~/.config/tdns-mgr/.tdns-mgr.conf"
     echo -e ""
     echo -e "${CYAN}DOCUMENTATION:${NC}"
     echo -e "    See EXAMPLES.md for detailed usage examples"

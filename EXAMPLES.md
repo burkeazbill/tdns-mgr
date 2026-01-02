@@ -142,10 +142,10 @@ tdns-mgr -q check-update
 ### View/Set Configuration
 
 ```bash
-# View current configuration
+# View current configuration (shows which config file is being used)
 tdns-mgr config show
 
-# Set server address
+# Set server address (saves to ~/.config/tdns-mgr/.tdns-mgr.conf)
 tdns-mgr config set server dns.example.com
 
 # Set port
@@ -153,6 +153,28 @@ tdns-mgr config set port 5380
 
 # Set username
 tdns-mgr config set user admin
+```
+
+### Configuration File Locations
+
+The script checks for configuration in the following order:
+
+1. **Command-line environment variables** (highest priority)
+2. **User config**: `~/.config/tdns-mgr/.tdns-mgr.conf`
+3. **System config**: `/etc/tdns-mgr/.tdns-mgr.conf`
+4. **Script directory**: `<script-dir>/.tdns-mgr.conf` (backward compatibility)
+
+```bash
+# Using environment variables (highest priority)
+export DNS_SERVER="dns.example.com"
+export DNS_USER="admin"
+tdns-mgr list-zones
+
+# The config file will be automatically created when you login or use 'config set'
+# It will be saved to: ~/.config/tdns-mgr/.tdns-mgr.conf
+
+# For backward compatibility, you can still place .tdns-mgr.conf in the script's directory
+# This will be checked last (lowest priority, but still works)
 ```
 
 ---

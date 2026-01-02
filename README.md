@@ -32,6 +32,9 @@ This tool is designed for system administrators, DevOps engineers, and homelab e
 - ✅ **Logging & Stats** - Query logs, download log files, and view server statistics.
 - ✅ **Blocklists** - Manage blocked/allowed zones and force blocklist updates.
 
+> [!WARNING]
+While 100% of the API has been covered by this script, only the DNS Zones and Record management functions have been tested by the author as that is his only requirement at the time of commiting this script.
+
 ---
 
 ## Installation
@@ -104,11 +107,13 @@ The examples cover:
 The script features a hierarchical help system:
 
 - **Summary Help** (default): Shows available help topics
+
   ```bash
   tdns-mgr --help
   ```
 
 - **Topic-Specific Help**: Get detailed help for specific topics
+
   ```bash
   tdns-mgr --help Authentication
   tdns-mgr --help DNS
@@ -116,6 +121,7 @@ The script features a hierarchical help system:
   ```
 
 - **Verbose Help**: View all commands at once
+
   ```bash
   tdns-mgr --help --verbose
   ```
@@ -126,9 +132,20 @@ Available help topics: `Authentication`, `DNS`, `Cluster`, `Administration`, `DH
 
 ## Configuration
 
-### Configuration File
+### Configuration File Locations
 
-Location: `~/.tdns-mgr.conf`
+The script checks for configuration in the following order:
+
+1. **Command-line environment variables** (highest priority)
+2. **User config**: `~/.config/tdns-mgr/.tdns-mgr.conf`
+3. **System config**: `/etc/tdns-mgr/.tdns-mgr.conf`
+4. **Script directory**: `<script-dir>/.tdns-mgr.conf` (backward compatibility)
+
+When saving configuration (via `login` or `config set`), it saves to: `~/.config/tdns-mgr/.tdns-mgr.conf`
+
+The directory is automatically created if it doesn't exist.
+
+### Configuration File Format
 
 ```bash
 DNS_SERVER="localhost"
@@ -139,7 +156,7 @@ DNS_USER="admin"
 
 ### Environment Variables
 
-You can override configuration using environment variables:
+You can override configuration using environment variables (highest priority):
 
 ```bash
 export DNS_SERVER="dns.example.com"
@@ -147,6 +164,13 @@ export DNS_PORT="5380"
 export DNS_USER="admin"
 export DNS_PASS="password"  # For non-interactive login
 export DNS_TOKEN="token"     # Skip login if token is set
+```
+
+### View Current Configuration
+
+```bash
+# Show which config file is being used and current values
+tdns-mgr config show
 ```
 
 ---
@@ -159,6 +183,14 @@ For issues or questions:
 2. Review the [API documentation](https://github.com/TechnitiumSoftware/DnsServer/blob/master/APIDOCS.md)
 
 ---
+
+## Other Technitium DNS Server Scripts or Tools
+
+> [!NOTE] I found other CLI tools after I had written this one. I have not used these.
+
+- **tdns CLI** - Cross platform management tool written in Golang and is available at [https://github.com/mbevc1/tdns](https://github.com/mbevc1/tdns).
+
+- **TechnitiumDNS-Scripts** - Interactive Python script written to manage DHCP Scope Reservations, available at [https://github.com/mbevc1/tdns](https://github.com/mbevc1/tdns)
 
 ## License
 
