@@ -53,6 +53,7 @@ DNS_TOKEN="${DNS_TOKEN:-}"
 DNS_USER="${DNS_USER:-admin}"
 DNS_PASS="${DNS_PASS:-}"
 QUIET="${QUIET:-false}"
+DEBUG="${DEBUG:-false}"
 
 # This will be set by load_config to the actual file that was loaded
 CONFIG_FILE="${USER_CONFIG_FILE}"
@@ -93,6 +94,12 @@ print_info() {
     fi
 }
 
+print_debug() {
+    if [[ "$DEBUG" == "true" ]]; then
+        echo -e "${YELLOW}[DEBUG]${NC} $1" >&2
+    fi
+}
+
 # Load configuration
 load_config() {
     # Configuration precedence order:
@@ -101,23 +108,45 @@ load_config() {
     # 3. System-wide config: /etc/tdns-mgr/.tdns-mgr.conf
     # 4. Script directory: SCRIPT_DIR/.tdns-mgr.conf (backward compatibility)
     
+    local config_loaded="none (using defaults or env vars)"
+
     # Check user config directory
     if [[ -f "$USER_CONFIG_FILE" ]]; then
         # shellcheck source=/dev/null
         source "$USER_CONFIG_FILE"
         CONFIG_FILE="$USER_CONFIG_FILE"
+        config_loaded="$USER_CONFIG_FILE"
     # Check system-wide config
     elif [[ -f "$SYSTEM_CONFIG_FILE" ]]; then
         # shellcheck source=/dev/null
         source "$SYSTEM_CONFIG_FILE"
         CONFIG_FILE="$SYSTEM_CONFIG_FILE"
+        config_loaded="$SYSTEM_CONFIG_FILE"
     # Check script directory (backward compatibility)
     elif [[ -f "$SCRIPT_CONFIG_FILE" ]]; then
         # shellcheck source=/dev/null
         source "$SCRIPT_CONFIG_FILE"
         CONFIG_FILE="$SCRIPT_CONFIG_FILE"
+        config_loaded="$SCRIPT_CONFIG_FILE"
     fi
     
+    print_debug "Configuration loaded from: $config_loaded"
+    print_debug "Environment Variables:"
+    print_debug "  DNS_SERVER: $DNS_SERVER"
+    print_debug "  DNS_PORT: $DNS_PORT"
+    print_debug "  DNS_PROTOCOL: $DNS_PROTOCOL"
+    print_debug "  DNS_USER: $DNS_USER"
+    if [[ -n "$DNS_PASS" ]]; then
+        print_debug "  DNS_PASS: ***************"
+    else
+        print_debug "  DNS_PASS: (not set)"
+    fi
+    if [[ -n "$DNS_TOKEN" ]]; then
+        print_debug "  DNS_TOKEN: ***************"
+    else
+        print_debug "  DNS_TOKEN: (not set)"
+    fi
+
     # Note: Command-line arguments (environment variables) take precedence
     # They are already set as defaults before this function is called
 }
@@ -159,13 +188,36 @@ api_call() {
     shift
     local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/${endpoint}"
     
-    if [[ -n "$DNS_TOKEN" ]]; then
-        curl -s -X POST "$url" \
-            -H "Authorization: Bearer $DNS_TOKEN" \
-            "$@"
-    else
-        curl -s -X POST "$url" "$@"
+    # For debug output, mask sensitive information
+    if [[ "$DEBUG" == "true" ]]; then
+        local masked_args=()
+        for arg in "$@"; do
+            local masked_arg="$arg"
+            # Mask token, pass, and password in URL-encoded data
+            masked_arg=$(echo "$masked_arg" | sed 's/\(^\|&\)token=[^&]*/\1token=***************/g')
+            masked_arg=$(echo "$masked_arg" | sed 's/\(^\|&\)pass=[^&]*/\1pass=***************/g')
+            masked_arg=$(echo "$masked_arg" | sed 's/\(^\|&\)password=[^&]*/\1password=***************/g')
+            masked_args+=("$masked_arg")
+        done
+        
+        local debug_cmd="curl -s -X POST \"$url\""
+        if [[ -n "$DNS_TOKEN" ]]; then
+            debug_cmd="$debug_cmd -H \"Authorization: Bearer ***************\""
+        fi
+        print_debug "Executing: $debug_cmd ${masked_args[*]}"
     fi
+
+    local response
+    if [[ -n "$DNS_TOKEN" ]]; then
+        response=$(curl -s -X POST "$url" \
+            -H "Authorization: Bearer $DNS_TOKEN" \
+            "$@")
+    else
+        response=$(curl -s -X POST "$url" "$@")
+    fi
+    
+    print_debug "API Response: $response"
+    echo "$response"
 }
 
 # API call with data
@@ -897,10 +949,13 @@ cmd_server_stats() {
 cmd_server_status() {
     print_info "Checking server status..."
     
-    if curl -s -f "${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}" > /dev/null 2>&1; then
-        print_success "DNS Server is running at ${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}"
+    local check_url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}"
+    print_debug "Checking URL: $check_url"
+    
+    if curl -s -f "$check_url" > /dev/null 2>&1; then
+        print_success "DNS Server is running at $check_url"
     else
-        print_error "DNS Server is not accessible at ${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}"
+        print_error "DNS Server is not accessible at $check_url"
         exit 1
     fi
 }
@@ -2043,6 +2098,7 @@ show_summary() {
     echo -e "    -h, --help [topic]              Show help (optionally for a specific topic)"
     echo -e "    -v, --version                   Show version"
     echo -e "    --verbose                       Show verbose help with all commands"
+    echo -e "    --debug                         Show debug information (API calls, responses, etc.)"
     echo -e ""
     echo -e "${BLUE}AVAILABLE HELP TOPICS:${NC}"
     echo -e "    Authentication                  Login, logout, password, updates, config"
@@ -2415,6 +2471,7 @@ show_help_verbose() {
     echo -e "    -h, --help [topic]              Show help (optionally for a specific topic)"
     echo -e "    -v, --version                   Show version"
     echo -e "    --verbose                       Show verbose help with all commands"
+    echo -e "    --debug                         Show debug information (API calls, responses, etc.)"
     
     # Call all topic-specific help functions
     show_help_authentication
@@ -2454,19 +2511,22 @@ show_help_verbose() {
 ################################################################################
 
 main() {
-    load_config
-    
     # Parse global options
     local verbose_help=false
-    while [[ "${1:-}" == "-q" || "${1:-}" == "--quiet" || "${1:-}" == "--silent" || "${1:-}" == "--verbose" ]]; do
+    while [[ "${1:-}" == "-q" || "${1:-}" == "--quiet" || "${1:-}" == "--silent" || "${1:-}" == "--verbose" || "${1:-}" == "--debug" ]]; do
         if [[ "$1" == "--verbose" ]]; then
             verbose_help=true
+            shift
+        elif [[ "$1" == "--debug" ]]; then
+            DEBUG=true
             shift
         elif [[ "$1" == "-q" || "$1" == "--quiet" || "$1" == "--silent" ]]; then
             QUIET=true
             shift
         fi
     done
+
+    load_config
 
     if [[ $# -eq 0 ]]; then
         check_dependencies
