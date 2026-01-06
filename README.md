@@ -199,10 +199,9 @@ For issues or questions:
 
 ## Other Technitium DNS Server Scripts or Tools
 
-> [!NOTE] I found other CLI tools after I had written this one. I have not used these.
-
+> [!NOTE]
+I found other CLI tools after I had written this one. I have not used these.
 - **tdns CLI** - Cross platform management tool written in Golang and is available at [https://github.com/mbevc1/tdns](https://github.com/mbevc1/tdns).
-
 - **TechnitiumDNS-Scripts** - Interactive Python script written to manage DHCP Scope Reservations, available at [https://github.com/mbevc1/tdns](https://github.com/mbevc1/tdns)
 
 ## License
