@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # Version
-VERSION="1.1.0"
+VERSION="1.1.1"
 
 # Colors for output (check if terminal supports colors)
 if [[ -t 1 ]]; then
@@ -2081,6 +2081,315 @@ cmd_config() {
     esac
 }
 
+cmd_completion() {
+    local shell="${1:-}"
+    
+    if [[ -z "$shell" ]]; then
+        print_error "Usage: tdns-mgr completion <SHELL>"
+        print_info "Available shells: bash, zsh, fish"
+        exit 1
+    fi
+    
+    case "$shell" in
+        bash)
+            cat <<'EOF'
+# bash completion for tdns-mgr
+_tdns_mgr_completion() {
+    local cur prev words cword
+    _init_completion || return
+
+    local commands="login logout change-password check-update config list-zones create-zone delete-zone enable-zone disable-zone export-zone import-zone export-zones import-zones list-records add-record update-record delete-record import-records server-status server-stats flush-cache query cluster-status cluster-init cluster-join cluster-leave cluster-sync user-list user-add user-delete user-get user-set session-list session-delete group-list group-add group-delete group-get group-set permissions-list permissions-set token-list token-add token-delete dhcp-scopes-list dhcp-scope-get dhcp-scope-add dhcp-scope-delete dhcp-scope-enable dhcp-scope-disable dhcp-leases-list dhcp-lease-add dhcp-lease-delete dhcp-reservations-list dhcp-reservation-add dhcp-reservation-delete apps-list apps-installed apps-install apps-uninstall apps-update apps-config-get apps-config-set blocked-list blocked-add blocked-delete blocked-flush allowed-list allowed-add allowed-delete allowed-flush blocklists-update log-list log-download log-query stats-top dnssec-sign dnssec-unsign dnssec-status settings-get settings-set zone-options-get zone-options-set catalog-list client-resolve completion version help"
+
+    if [[ $cword -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+        return
+    fi
+
+    case "${words[1]}" in
+        completion)
+            if [[ $cword -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
+            fi
+            ;;
+        config)
+            if [[ $cword -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "show set" -- "$cur") )
+            elif [[ $cword -eq 3 ]] && [[ "${words[2]}" == "set" ]]; then
+                COMPREPLY=( $(compgen -W "server port protocol user" -- "$cur") )
+            fi
+            ;;
+        create-zone|delete-zone|enable-zone|disable-zone|export-zone|import-zone|list-records)
+            # Zone name completion could be added here
+            ;;
+        add-record|update-record|delete-record)
+            if [[ $cword -eq 3 ]]; then
+                COMPREPLY=( $(compgen -W "A AAAA CNAME MX TXT NS PTR SRV CAA" -- "$cur") )
+            fi
+            ;;
+    esac
+}
+
+complete -F _tdns_mgr_completion tdns-mgr
+complete -F _tdns_mgr_completion tdns-mgr.sh
+EOF
+            ;;
+        zsh)
+            cat <<'EOF'
+#compdef tdns-mgr tdns-mgr.sh
+
+_tdns_mgr() {
+    local -a commands
+    commands=(
+        'login:Authenticate with DNS server'
+        'logout:Logout from DNS server'
+        'change-password:Change user password'
+        'check-update:Check for DNS server updates'
+        'config:View or modify configuration'
+        'list-zones:List all DNS zones'
+        'create-zone:Create a new DNS zone'
+        'delete-zone:Delete a DNS zone'
+        'enable-zone:Enable a DNS zone'
+        'disable-zone:Disable a DNS zone'
+        'export-zone:Export a zone to BIND format'
+        'import-zone:Import a zone from file'
+        'export-zones:Export all zones to zip'
+        'import-zones:Import zones from zip'
+        'list-records:List DNS records in a zone'
+        'add-record:Add a DNS record'
+        'update-record:Update a DNS record'
+        'delete-record:Delete a DNS record'
+        'import-records:Import records from CSV'
+        'server-status:Get server status'
+        'server-stats:Get server statistics'
+        'flush-cache:Flush DNS cache'
+        'query:Query DNS server'
+        'cluster-status:Get cluster status'
+        'cluster-init:Initialize a cluster'
+        'cluster-join:Join a cluster'
+        'cluster-leave:Leave a cluster'
+        'cluster-sync:Sync cluster data'
+        'user-list:List users'
+        'user-add:Add a user'
+        'user-delete:Delete a user'
+        'user-get:Get user details'
+        'user-set:Set user properties'
+        'session-list:List sessions'
+        'session-delete:Delete a session'
+        'group-list:List groups'
+        'group-add:Add a group'
+        'group-delete:Delete a group'
+        'group-get:Get group details'
+        'group-set:Set group properties'
+        'permissions-list:List permissions'
+        'permissions-set:Set permissions'
+        'token-list:List API tokens'
+        'token-add:Add API token'
+        'token-delete:Delete API token'
+        'dhcp-scopes-list:List DHCP scopes'
+        'dhcp-scope-get:Get DHCP scope'
+        'dhcp-scope-add:Add DHCP scope'
+        'dhcp-scope-delete:Delete DHCP scope'
+        'dhcp-scope-enable:Enable DHCP scope'
+        'dhcp-scope-disable:Disable DHCP scope'
+        'dhcp-leases-list:List DHCP leases'
+        'dhcp-lease-add:Add DHCP lease'
+        'dhcp-lease-delete:Delete DHCP lease'
+        'dhcp-reservations-list:List DHCP reservations'
+        'dhcp-reservation-add:Add DHCP reservation'
+        'dhcp-reservation-delete:Delete DHCP reservation'
+        'apps-list:List available DNS apps'
+        'apps-installed:List installed DNS apps'
+        'apps-install:Install a DNS app'
+        'apps-uninstall:Uninstall a DNS app'
+        'apps-update:Update a DNS app'
+        'apps-config-get:Get DNS app config'
+        'apps-config-set:Set DNS app config'
+        'blocked-list:List blocked zones'
+        'blocked-add:Add blocked zone'
+        'blocked-delete:Delete blocked zone'
+        'blocked-flush:Flush all blocked zones'
+        'allowed-list:List allowed zones'
+        'allowed-add:Add allowed zone'
+        'allowed-delete:Delete allowed zone'
+        'allowed-flush:Flush all allowed zones'
+        'blocklists-update:Force update blocklists'
+        'log-list:List log files'
+        'log-download:Download log file'
+        'log-query:Query logs'
+        'stats-top:Get top statistics'
+        'dnssec-sign:Sign zone with DNSSEC'
+        'dnssec-unsign:Unsign zone'
+        'dnssec-status:Get DNSSEC status'
+        'settings-get:Get server settings'
+        'settings-set:Set server settings'
+        'zone-options-get:Get zone options'
+        'zone-options-set:Set zone options'
+        'catalog-list:List catalog zones'
+        'client-resolve:Resolve DNS query'
+        'completion:Generate shell completion script'
+        'version:Show version'
+        'help:Show help'
+    )
+
+    _arguments -C \
+        '(-h --help)'{-h,--help}'[Show help]' \
+        '(-v --version)'{-v,--version}'[Show version]' \
+        '(-q --quiet --silent)'{-q,--quiet,--silent}'[Quiet mode]' \
+        '--debug[Debug mode]' \
+        '--verbose[Verbose output]' \
+        '1: :->command' \
+        '*:: :->args'
+
+    case $state in
+        command)
+            _describe -t commands 'tdns-mgr commands' commands
+            ;;
+        args)
+            case ${words[1]} in
+                completion)
+                    _values 'shell' bash zsh fish
+                    ;;
+                config)
+                    if (( CURRENT == 2 )); then
+                        _values 'action' show set
+                    elif [[ ${words[2]} == "set" ]] && (( CURRENT == 3 )); then
+                        _values 'config key' server port protocol user
+                    fi
+                    ;;
+                add-record|update-record|delete-record)
+                    if (( CURRENT == 3 )); then
+                        _values 'record type' A AAAA CNAME MX TXT NS PTR SRV CAA
+                    fi
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_tdns_mgr "$@"
+EOF
+            ;;
+        fish)
+            cat <<'EOF'
+# fish completion for tdns-mgr
+
+# Main commands
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'login' -d 'Authenticate with DNS server'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'logout' -d 'Logout from DNS server'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'change-password' -d 'Change user password'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'check-update' -d 'Check for DNS server updates'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'config' -d 'View or modify configuration'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'list-zones' -d 'List all DNS zones'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'create-zone' -d 'Create a new DNS zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'delete-zone' -d 'Delete a DNS zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'enable-zone' -d 'Enable a DNS zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'disable-zone' -d 'Disable a DNS zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'export-zone' -d 'Export a zone to BIND format'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'import-zone' -d 'Import a zone from file'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'export-zones' -d 'Export all zones to zip'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'import-zones' -d 'Import zones from zip'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'list-records' -d 'List DNS records in a zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'add-record' -d 'Add a DNS record'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'update-record' -d 'Update a DNS record'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'delete-record' -d 'Delete a DNS record'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'import-records' -d 'Import records from CSV'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'server-status' -d 'Get server status'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'server-stats' -d 'Get server statistics'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'flush-cache' -d 'Flush DNS cache'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'query' -d 'Query DNS server'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'cluster-status' -d 'Get cluster status'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'cluster-init' -d 'Initialize a cluster'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'cluster-join' -d 'Join a cluster'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'cluster-leave' -d 'Leave a cluster'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'cluster-sync' -d 'Sync cluster data'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'user-list' -d 'List users'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'user-add' -d 'Add a user'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'user-delete' -d 'Delete a user'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'user-get' -d 'Get user details'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'user-set' -d 'Set user properties'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'session-list' -d 'List sessions'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'session-delete' -d 'Delete a session'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'group-list' -d 'List groups'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'group-add' -d 'Add a group'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'group-delete' -d 'Delete a group'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'group-get' -d 'Get group details'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'group-set' -d 'Set group properties'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'permissions-list' -d 'List permissions'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'permissions-set' -d 'Set permissions'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'token-list' -d 'List API tokens'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'token-add' -d 'Add API token'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'token-delete' -d 'Delete API token'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-scopes-list' -d 'List DHCP scopes'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-scope-get' -d 'Get DHCP scope'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-scope-add' -d 'Add DHCP scope'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-scope-delete' -d 'Delete DHCP scope'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-scope-enable' -d 'Enable DHCP scope'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-scope-disable' -d 'Disable DHCP scope'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-leases-list' -d 'List DHCP leases'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-lease-add' -d 'Add DHCP lease'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-lease-delete' -d 'Delete DHCP lease'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-reservations-list' -d 'List DHCP reservations'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-reservation-add' -d 'Add DHCP reservation'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dhcp-reservation-delete' -d 'Delete DHCP reservation'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'apps-list' -d 'List available DNS apps'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'apps-installed' -d 'List installed DNS apps'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'apps-install' -d 'Install a DNS app'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'apps-uninstall' -d 'Uninstall a DNS app'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'apps-update' -d 'Update a DNS app'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'apps-config-get' -d 'Get DNS app config'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'apps-config-set' -d 'Set DNS app config'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'blocked-list' -d 'List blocked zones'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'blocked-add' -d 'Add blocked zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'blocked-delete' -d 'Delete blocked zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'blocked-flush' -d 'Flush all blocked zones'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'allowed-list' -d 'List allowed zones'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'allowed-add' -d 'Add allowed zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'allowed-delete' -d 'Delete allowed zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'allowed-flush' -d 'Flush all allowed zones'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'blocklists-update' -d 'Force update blocklists'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'log-list' -d 'List log files'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'log-download' -d 'Download log file'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'log-query' -d 'Query logs'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'stats-top' -d 'Get top statistics'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dnssec-sign' -d 'Sign zone with DNSSEC'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dnssec-unsign' -d 'Unsign zone'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'dnssec-status' -d 'Get DNSSEC status'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'settings-get' -d 'Get server settings'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'settings-set' -d 'Set server settings'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'zone-options-get' -d 'Get zone options'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'zone-options-set' -d 'Set zone options'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'catalog-list' -d 'List catalog zones'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'client-resolve' -d 'Resolve DNS query'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completion script'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'version' -d 'Show version'
+complete -c tdns-mgr -f -n '__fish_use_subcommand' -a 'help' -d 'Show help'
+
+# Global options
+complete -c tdns-mgr -s h -l help -d 'Show help'
+complete -c tdns-mgr -s v -l version -d 'Show version'
+complete -c tdns-mgr -s q -l quiet -l silent -d 'Quiet mode'
+complete -c tdns-mgr -l debug -d 'Debug mode'
+complete -c tdns-mgr -l verbose -d 'Verbose output'
+
+# Completion command options
+complete -c tdns-mgr -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish' -d 'Shell type'
+
+# Config command options
+complete -c tdns-mgr -n '__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from show set' -a 'show set' -d 'Config action'
+complete -c tdns-mgr -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set' -a 'server port protocol user' -d 'Config key'
+
+# Record type completions
+complete -c tdns-mgr -n '__fish_seen_subcommand_from add-record update-record delete-record' -a 'A AAAA CNAME MX TXT NS PTR SRV CAA' -d 'Record type'
+EOF
+            ;;
+        *)
+            print_error "Unknown shell: $shell"
+            print_info "Available shells: bash, zsh, fish"
+            exit 1
+            ;;
+    esac
+}
+
 ################################################################################
 # Menu Function
 ################################################################################
@@ -2112,6 +2421,7 @@ show_summary() {
     echo -e "    DNSSEC                          DNSSEC signing and management"
     echo -e "    Settings                        Server and zone configuration"
     echo -e "    Client                          DNS client resolution tool"
+    echo -e "    Completion                      Shell autocompletion commands"
     echo -e ""
     echo -e "${YELLOW}EXAMPLES:${NC}"
     echo -e "    ${GREEN}# Show help for a specific topic${NC}"
@@ -2460,6 +2770,57 @@ show_help_client() {
     echo -e ""
 }
 
+show_help_completion() {
+    echo -e ""
+    echo -e "${BLUE}SHELL COMPLETION COMMANDS:${NC}"
+    echo -e "    completion <shell>              Generate shell completion script"
+    echo -e "                                    Supported shells: bash, zsh, fish"
+    echo -e ""
+    echo -e "${YELLOW}USAGE:${NC}"
+    echo -e "    tdns-mgr completion bash        Generate bash completion script"
+    echo -e "    tdns-mgr completion zsh         Generate zsh completion script"
+    echo -e "    tdns-mgr completion fish        Generate fish completion script"
+    echo -e ""
+    echo -e "${YELLOW}BASH COMPLETION:${NC}"
+    echo -e ""
+    echo -e "    ${GREEN}# System-wide installation (requires sudo)${NC}"
+    echo -e "    tdns-mgr completion bash | sudo tee /etc/bash_completion.d/tdns-mgr > /dev/null"
+    echo -e ""
+    echo -e "    ${GREEN}# Per-user installation${NC}"
+    echo -e "    mkdir -p ~/.local/share/bash-completion/completions"
+    echo -e "    tdns-mgr completion bash > ~/.local/share/bash-completion/completions/tdns-mgr"
+    echo -e "    source ~/.local/share/bash-completion/completions/tdns-mgr"
+    echo -e ""
+    echo -e "${YELLOW}ZSH COMPLETION:${NC}"
+    echo -e ""
+    echo -e "    ${GREEN}# System-wide installation (requires sudo)${NC}"
+    echo -e "    tdns-mgr completion zsh | sudo tee /usr/share/zsh/site-functions/_tdns-mgr > /dev/null"
+    echo -e ""
+    echo -e "    ${GREEN}# Per-user installation${NC}"
+    echo -e "    mkdir -p ~/.zsh/completion"
+    echo -e "    tdns-mgr completion zsh > ~/.zsh/completion/_tdns-mgr"
+    echo -e ""
+    echo -e "    ${GREEN}# Add to ~/.zshrc if not already present:${NC}"
+    echo -e "    fpath=(~/.zsh/completion \$fpath)"
+    echo -e "    autoload -Uz compinit"
+    echo -e "    compinit"
+    echo -e ""
+    echo -e "    ${GREEN}# Then reload your shell${NC}"
+    echo -e "    exec zsh"
+    echo -e ""
+    echo -e "${YELLOW}FISH COMPLETION:${NC}"
+    echo -e ""
+    echo -e "    ${GREEN}# System-wide installation (requires sudo)${NC}"
+    echo -e "    tdns-mgr completion fish | sudo tee /usr/share/fish/vendor_completions.d/tdns-mgr.fish > /dev/null"
+    echo -e ""
+    echo -e "    ${GREEN}# Per-user installation${NC}"
+    echo -e "    mkdir -p ~/.config/fish/completions"
+    echo -e "    tdns-mgr completion fish > ~/.config/fish/completions/tdns-mgr.fish"
+    echo -e ""
+    echo -e "    ${GREEN}# Fish will automatically load the completion on next shell start${NC}"
+    echo -e ""
+}
+
 show_help_verbose() {
     print_header
     
@@ -2485,6 +2846,7 @@ show_help_verbose() {
     show_help_dnssec
     show_help_settings
     show_help_client
+    show_help_completion
     
     # Show environment variables and documentation
     echo -e "${CYAN}ENVIRONMENT VARIABLES:${NC}"
@@ -2592,6 +2954,9 @@ main() {
                     client|resolve)
                         show_help_client
                         ;;
+                    completion|completions|autocomplete)
+                        show_help_completion
+                        ;;
                     *)
                         print_error "Unknown help topic: $topic"
                         echo ""
@@ -2626,6 +2991,9 @@ main() {
             ;;
         config)
             cmd_config "$@"
+            ;;
+        completion)
+            cmd_completion "$@"
             ;;
         
         # Zone Management

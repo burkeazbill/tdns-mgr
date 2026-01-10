@@ -1,6 +1,6 @@
 # Technitium DNS Manager (tdns-mgr)
 
-**Version**: 1.1.0  
+**Version**: 1.1.1  
 **Author**: Burke Azbill  
 **API Reference**: [Technitium DNS Server API](https://github.com/TechnitiumSoftware/DnsServer/blob/master/APIDOCS.md)
 
@@ -126,7 +126,89 @@ The script features a hierarchical help system:
   tdns-mgr --help --verbose
   ```
 
-Available help topics: `Authentication`, `DNS`, `Cluster`, `Administration`, `DHCP`, `Apps`, `Blocked`, `Logging`, `DNSSEC`, `Settings`, `Client`
+Available help topics: `Authentication`, `DNS`, `Cluster`, `Administration`, `DHCP`, `Apps`, `Blocked`, `Logging`, `DNSSEC`, `Settings`, `Client`, `Completion`
+
+### Shell Completion
+
+The script provides shell completion for command names, options, and common arguments, enhancing the command-line experience.
+
+#### Generating Completion Scripts
+
+To generate a completion script for your shell:
+
+```bash
+# For Bash
+tdns-mgr completion bash
+
+# For Zsh
+tdns-mgr completion zsh
+
+# For Fish
+tdns-mgr completion fish
+```
+
+#### Installation Instructions
+
+**Bash Completion:**
+
+System-wide installation (requires sudo):
+```bash
+tdns-mgr completion bash | sudo tee /etc/bash_completion.d/tdns-mgr > /dev/null
+```
+
+Per-user installation:
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+tdns-mgr completion bash > ~/.local/share/bash-completion/completions/tdns-mgr
+```
+
+Then reload your shell or source the completion file:
+```bash
+source ~/.local/share/bash-completion/completions/tdns-mgr
+```
+
+**Zsh Completion:**
+
+System-wide installation (requires sudo):
+```bash
+tdns-mgr completion zsh | sudo tee /usr/share/zsh/site-functions/_tdns-mgr > /dev/null
+```
+
+Per-user installation:
+```bash
+mkdir -p ~/.zsh/completion
+tdns-mgr completion zsh > ~/.zsh/completion/_tdns-mgr
+```
+
+Add to your `~/.zshrc` if not already present:
+```bash
+fpath=(~/.zsh/completion $fpath)
+autoload -Uz compinit
+compinit
+```
+
+Then reload your shell:
+```bash
+exec zsh
+```
+
+**Fish Completion:**
+
+System-wide installation (requires sudo):
+```bash
+tdns-mgr completion fish | sudo tee /usr/share/fish/vendor_completions.d/tdns-mgr.fish > /dev/null
+```
+
+Per-user installation:
+```bash
+mkdir -p ~/.config/fish/completions
+tdns-mgr completion fish > ~/.config/fish/completions/tdns-mgr.fish
+```
+
+Fish will automatically load the completion on next shell start or you can reload:
+```bash
+source ~/.config/fish/completions/tdns-mgr.fish
+```
 
 ---
 
