@@ -812,6 +812,21 @@ cmd_import_records() {
     # but covers standard usage. 
     
     print_debug "Starting CSV parsing..."
+    print_debug "About to read from file: $file"
+    
+    # Test if we can read the file
+    if [[ ! -r "$file" ]]; then
+        print_error "File is not readable: $file"
+        exit 1
+    fi
+    
+    print_debug "File is readable, starting while loop..."
+    
+    # Show first line of file for debugging
+    if [[ "$DEBUG" == "true" ]]; then
+        local first_line=$(head -n 1 "$file" 2>&1)
+        print_debug "First line of file: '$first_line'"
+    fi
     
     while IFS= read -r line || [[ -n "$line" ]]; do
         ((line_num++))
@@ -839,6 +854,8 @@ cmd_import_records() {
         # This will convert CSV line to pipe-delimited values for safe reading by bash
         # A simple state-machine parser in awk to handle quotes
         print_debug "Line $line_num: Parsing with awk..."
+        
+        # Try AWK parsing with error handling
         parsed_line=$(echo "$line" | awk '{
             # Fallback for non-gawk (standard awk does not support FPAT)
             # We use a simpler strategy: replace "," within quotes with placeholder if needed
@@ -862,7 +879,15 @@ cmd_import_records() {
                     $0=substr($0, 2)
                 }
             }
-        }')
+        }' 2>&1)
+        
+        local awk_exit=$?
+        if [[ $awk_exit -ne 0 ]]; then
+            print_debug "Line $line_num: AWK failed with exit code $awk_exit, trying simple parsing"
+            # Fallback to simple comma split
+            parsed_line=$(echo "$line" | tr ',' '|')
+        fi
+        
         print_debug "Line $line_num: Parsed result: '$parsed_line'"
         
         IFS='|' read -r zone name type value _ <<< "$parsed_line"
@@ -960,7 +985,8 @@ cmd_import_records() {
         fi
         
     done < "$file"
-
+    
+    print_debug "Exited while loop"
     print_debug "Import complete - Total lines: $line_num, Processed: $processed_lines, Skipped: $skipped_lines"
     print_debug "Results - New records: $new_records, Errors: $error_count"
     
