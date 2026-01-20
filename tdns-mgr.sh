@@ -826,10 +826,26 @@ cmd_import_records() {
     if [[ "$DEBUG" == "true" ]]; then
         local first_line=$(head -n 1 "$file" 2>&1)
         print_debug "First line of file: '$first_line'"
+        local line_count=$(wc -l < "$file" 2>&1)
+        print_debug "Attempting to read $line_count lines from file"
+        
+        # Try to read file into array to test if it's accessible
+        local test_line_count=0
+        while IFS= read -r _test_line; do
+            ((test_line_count++))
+        done < "$file"
+        print_debug "Test read completed: $test_line_count lines read successfully"
     fi
     
+    print_debug "Starting main processing loop..."
+    print_debug "Loop will read from: $file"
+    print_debug "File descriptor test: $(test -f "$file" && echo 'EXISTS' || echo 'MISSING')"
+    
+    # Use cat to pipe into while loop instead of file redirection
+    # This avoids potential file descriptor issues
     while IFS= read -r line || [[ -n "$line" ]]; do
         ((line_num++))
+        print_debug ">>> ENTERED LOOP - Processing line $line_num"
         print_debug "Line $line_num: Raw input: '$line'"
         
         # Remove carriage return (Window compat)
@@ -984,7 +1000,7 @@ cmd_import_records() {
             print_debug "Line $line_num: ERROR - Failed to add record: $err_msg"
         fi
         
-    done < "$file"
+    done < <(cat "$file")
     
     print_debug "Exited while loop"
     print_debug "Import complete - Total lines: $line_num, Processed: $processed_lines, Skipped: $skipped_lines"
