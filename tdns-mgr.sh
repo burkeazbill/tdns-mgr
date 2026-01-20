@@ -832,7 +832,7 @@ cmd_import_records() {
         # Try to read file into array to test if it's accessible
         local test_line_count=0
         while IFS= read -r _test_line; do
-            ((test_line_count++))
+            ((++test_line_count))
         done < "$file"
         print_debug "Test read completed: $test_line_count lines read successfully"
     fi
@@ -844,7 +844,7 @@ cmd_import_records() {
     # Use cat to pipe into while loop instead of file redirection
     # This avoids potential file descriptor issues
     while IFS= read -r line || [[ -n "$line" ]]; do
-        ((line_num++))
+        ((++line_num))
         print_debug ">>> ENTERED LOOP - Processing line $line_num"
         print_debug "Line $line_num: Raw input: '$line'"
         
@@ -855,14 +855,14 @@ cmd_import_records() {
         # Skip comments and empty lines
         if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
             print_debug "Line $line_num: Skipped (empty or comment)"
-            ((skipped_lines++))
+            ((++skipped_lines))
             continue
         fi
         
         # Skip header if it looks like header
         if [[ "$line_num" -eq 1 && "$line" =~ ^zone,name,type,value ]]; then
             print_debug "Line $line_num: Skipped (header)"
-            ((skipped_lines++))
+            ((++skipped_lines))
             continue
         fi
         
@@ -912,11 +912,11 @@ cmd_import_records() {
         # Validation
         if [[ -z "$zone" || -z "$name" || -z "$type" || -z "$value" ]]; then
             print_debug "Line $line_num: Skipped (missing required fields)"
-            ((skipped_lines++))
+            ((++skipped_lines))
             continue
         fi
         
-        ((processed_lines++))
+        ((++processed_lines))
         print_debug "Line $line_num: Processing record #$processed_lines"
         
         # Prepare API data
@@ -966,7 +966,7 @@ cmd_import_records() {
                 print_debug "Line $line_num: Record type PTR - pointer: $value"
                 ;;
             *)
-                ((error_count++))
+                ((++error_count))
                 error_details="${error_details}Unsupported type '$type' for $name.$zone; "
                 print_debug "Line $line_num: ERROR - Unsupported record type: $type"
                 continue
@@ -991,10 +991,10 @@ cmd_import_records() {
         print_debug "Line $line_num: API response: $response"
         
         if echo "$response" | grep -q '"status":"ok"'; then
-            ((new_records++))
+            ((++new_records))
             print_debug "Line $line_num: SUCCESS - Record added (total: $new_records)"
         else
-            ((error_count++))
+            ((++error_count))
             local err_msg=$(echo "$response" | jq -r '.errorMessage' 2>/dev/null || echo "Unknown error")
             error_details="${error_details}Failed $name.$zone ($type): $err_msg; "
             print_debug "Line $line_num: ERROR - Failed to add record: $err_msg"
