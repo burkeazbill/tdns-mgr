@@ -794,36 +794,51 @@ cmd_import_records() {
     fi
     
     print_info "Importing records from $file..."
+    print_debug "File exists and is readable"
+    print_debug "Create PTR: $create_ptr"
+    print_debug "File size: $(wc -c < "$file") bytes"
+    print_debug "File lines: $(wc -l < "$file") lines"
     
     # Initialize counters and error logs
     local new_records=0
     local error_count=0
     local error_details=""
     local line_num=0
+    local processed_lines=0
+    local skipped_lines=0
     
     # Bash/AWK CSV Parser
     # Handles basic CSV. For quoted fields with commas, this simple logic might split incorrectly
     # but covers standard usage. 
     
+    print_debug "Starting CSV parsing..."
+    
     while IFS= read -r line || [[ -n "$line" ]]; do
         ((line_num++))
+        print_debug "Line $line_num: Raw input: '$line'"
         
         # Remove carriage return (Window compat)
         line="${line//$'\r'/}"
+        print_debug "Line $line_num: After CR removal: '$line'"
         
         # Skip comments and empty lines
         if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+            print_debug "Line $line_num: Skipped (empty or comment)"
+            ((skipped_lines++))
             continue
         fi
         
         # Skip header if it looks like header
         if [[ "$line_num" -eq 1 && "$line" =~ ^zone,name,type,value ]]; then
+            print_debug "Line $line_num: Skipped (header)"
+            ((skipped_lines++))
             continue
         fi
         
         # Parse CSV using awk to handle potential quoting better than straight read
         # This will convert CSV line to pipe-delimited values for safe reading by bash
         # A simple state-machine parser in awk to handle quotes
+        print_debug "Line $line_num: Parsing with awk..."
         parsed_line=$(echo "$line" | awk '{
             # Fallback for non-gawk (standard awk does not support FPAT)
             # We use a simpler strategy: replace "," within quotes with placeholder if needed
@@ -848,21 +863,32 @@ cmd_import_records() {
                 }
             }
         }')
+        print_debug "Line $line_num: Parsed result: '$parsed_line'"
         
         IFS='|' read -r zone name type value _ <<< "$parsed_line"
+        print_debug "Line $line_num: Extracted fields - zone='$zone', name='$name', type='$type', value='$value'"
         
         # Validation
         if [[ -z "$zone" || -z "$name" || -z "$type" || -z "$value" ]]; then
+            print_debug "Line $line_num: Skipped (missing required fields)"
+            ((skipped_lines++))
             continue
         fi
+        
+        ((processed_lines++))
+        print_debug "Line $line_num: Processing record #$processed_lines"
         
         # Prepare API data
         # Ensure domain is FQDN logic
         local domain_name="$name"
         if [[ "$name" == "@" ]]; then
             domain_name="$zone"
+            print_debug "Line $line_num: Name is '@', using zone as domain: $domain_name"
         elif [[ "$name" != *".$zone" ]]; then
             domain_name="$name.$zone"
+            print_debug "Line $line_num: Appending zone to name: $domain_name"
+        else
+            print_debug "Line $line_num: Name already includes zone: $domain_name"
         fi
         
         local data="token=${DNS_TOKEN}&zone=${zone}&domain=${domain_name}&type=${type}&ttl=3600"
@@ -870,54 +896,74 @@ cmd_import_records() {
         # PTR Logic
         if [[ "$create_ptr" == "true" && ("$type" == "A" || "$type" == "AAAA") ]]; then
             data="${data}&ptr=true&createPtrZone=true"
+            print_debug "Line $line_num: PTR record will be created"
         fi
         
         case "$type" in
             A|AAAA)
                 data="${data}&ipAddress=${value}"
+                print_debug "Line $line_num: Record type $type - IP address: $value"
                 ;;
             CNAME)
                 data="${data}&cname=${value}"
+                print_debug "Line $line_num: Record type CNAME - target: $value"
                 ;;
             MX)
                 data="${data}&exchange=${value}&preference=10"
+                print_debug "Line $line_num: Record type MX - exchange: $value, preference: 10"
                 ;;
             TXT)
                 data="${data}&text=${value}"
+                print_debug "Line $line_num: Record type TXT - text: $value"
                 ;;
             NS)
                 data="${data}&nameServer=${value}"
+                print_debug "Line $line_num: Record type NS - nameserver: $value"
                 ;;
             PTR)
                 data="${data}&ptrName=${value}"
+                print_debug "Line $line_num: Record type PTR - pointer: $value"
                 ;;
             *)
                 ((error_count++))
                 error_details="${error_details}Unsupported type '$type' for $name.$zone; "
+                print_debug "Line $line_num: ERROR - Unsupported record type: $type"
                 continue
                 ;;
         esac
         
         # Call API directly
         local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/zones/records/add"
+        print_debug "Line $line_num: API URL: $url"
+        print_debug "Line $line_num: API data: $data"
+        
         local response=""
         
         if [[ -n "$DNS_TOKEN" ]]; then
+            print_debug "Line $line_num: Making authenticated API call..."
             response=$(curl -s -X POST "$url" -H "Authorization: Bearer $DNS_TOKEN" -d "$data")
         else
+            print_debug "Line $line_num: Making unauthenticated API call..."
             response=$(curl -s -X POST "$url" -d "$data")
         fi
         
+        print_debug "Line $line_num: API response: $response"
+        
         if echo "$response" | grep -q '"status":"ok"'; then
             ((new_records++))
+            print_debug "Line $line_num: SUCCESS - Record added (total: $new_records)"
         else
             ((error_count++))
             local err_msg=$(echo "$response" | jq -r '.errorMessage' 2>/dev/null || echo "Unknown error")
             error_details="${error_details}Failed $name.$zone ($type): $err_msg; "
+            print_debug "Line $line_num: ERROR - Failed to add record: $err_msg"
         fi
         
     done < "$file"
 
+    print_debug "Import complete - Total lines: $line_num, Processed: $processed_lines, Skipped: $skipped_lines"
+    print_debug "Results - New records: $new_records, Errors: $error_count"
+    
     # Construct JSON output
     local message="Success"
     if [[ $error_count -gt 0 ]]; then
@@ -926,6 +972,8 @@ cmd_import_records() {
     
     # Sanitize message for JSON
     message=${message//\"/\\\"}
+    
+    print_debug "Generating JSON output..."
     
     echo "{
   \"New Records\": $new_records,

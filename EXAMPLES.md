@@ -278,6 +278,9 @@ tdns-mgr import-records dns-records.csv
 
 # Import records with automatic PTR creation
 tdns-mgr import-records dns-records.csv --ptr
+
+# Import with debug output to troubleshoot issues
+tdns-mgr --debug import-records dns-records.csv
 ```
 
 **CSV Format for `import-records`**:
@@ -288,6 +291,23 @@ example.com,web,A,192.168.1.20
 example.com,db,A,192.168.1.21
 example.com,mail,CNAME,web.example.com
 ```
+
+**Troubleshooting Import Issues**:
+
+If your CSV import is not working as expected, use the `--debug` flag to see detailed information about each step:
+
+```bash
+tdns-mgr --debug import-records new-dns-records.csv
+```
+
+Debug output includes:
+- File reading confirmation and statistics
+- Each line being processed (raw and parsed)
+- Field extraction (zone, name, type, value)
+- Domain name construction logic
+- API URLs and request data
+- API responses and success/failure status
+- Summary of processed, skipped, successful, and failed records
 
 ### Server Management
 
