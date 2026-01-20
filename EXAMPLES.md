@@ -281,6 +281,9 @@ tdns-mgr import-records dns-records.csv --ptr
 
 # Import with debug output to troubleshoot issues
 tdns-mgr --debug import-records dns-records.csv
+
+# Delete records using CSV file
+tdns-mgr delete-records dns-records.csv
 ```
 
 **CSV Format for `import-records`**:

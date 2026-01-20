@@ -1024,6 +1024,184 @@ cmd_import_records() {
 }"
 }
 
+cmd_delete_records() {
+    check_auth
+    local file="$1"
+    
+    if [[ -z "$file" ]]; then
+        print_error "Usage: tdns-mgr.sh delete-records <file>"
+        exit 1
+    fi
+    
+    if [[ ! -f "$file" ]]; then
+        echo "{\"Deleted Records\": 0, \"Errors\": 1, \"Message\": \"File not found: $file\"}"
+        exit 1
+    fi
+    
+    print_info "Deleting records from $file..."
+    print_debug "File exists and is readable"
+    print_debug "File size: $(wc -c < "$file") bytes"
+    print_debug "File lines: $(wc -l < "$file") lines"
+    
+    # Initialize counters and error logs
+    local deleted_records=0
+    local error_count=0
+    local error_details=""
+    local line_num=0
+    local processed_lines=0
+    local skipped_lines=0
+    
+    print_debug "Starting CSV parsing..."
+    print_debug "About to read from file: $file"
+    
+    # Test if we can read the file
+    if [[ ! -r "$file" ]]; then
+        print_error "File is not readable: $file"
+        exit 1
+    fi
+    
+    print_debug "Starting main processing loop..."
+    
+    # Use cat to pipe into while loop instead of file redirection
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        ((++line_num))
+        print_debug ">>> ENTERED LOOP - Processing line $line_num"
+        print_debug "Line $line_num: Raw input: '$line'"
+        
+        # Remove carriage return (Window compat)
+        line="${line//$'\r'/}"
+        
+        # Skip comments and empty lines
+        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+            print_debug "Line $line_num: Skipped (empty or comment)"
+            ((++skipped_lines))
+            continue
+        fi
+        
+        # Skip header if it looks like header
+        if [[ "$line_num" -eq 1 && "$line" =~ ^zone,name,type,value ]]; then
+            print_debug "Line $line_num: Skipped (header)"
+            ((++skipped_lines))
+            continue
+        fi
+        
+        # Parse CSV using awk (same logic as import)
+        parsed_line=$(echo "$line" | awk '{
+            $0=$0","; 
+            while($0) {
+                if ($0 ~ /^"[^"]*"|^[^",]*/) { 
+                    match($0, /^"[^"]*"|^[^",]*/)
+                    f=substr($0, RSTART, RLENGTH)
+                    gsub(/^"|"$/, "", f) 
+                    printf "%s|", f
+                    $0=substr($0, RLENGTH+2)
+                } else {
+                    printf "|"
+                    $0=substr($0, 2)
+                }
+            }
+        }' 2>&1)
+        
+        local awk_exit=$?
+        if [[ $awk_exit -ne 0 ]]; then
+            # Fallback to simple comma split
+            parsed_line=$(echo "$line" | tr ',' '|')
+        fi
+        
+        IFS='|' read -r zone name type value _ <<< "$parsed_line"
+        
+        # Validation
+        if [[ -z "$zone" || -z "$name" || -z "$type" || -z "$value" ]]; then
+            print_debug "Line $line_num: Skipped (missing required fields)"
+            ((++skipped_lines))
+            continue
+        fi
+        
+        ((++processed_lines))
+        print_debug "Line $line_num: Processing record #$processed_lines"
+        
+        # Prepare API data
+        local domain_name="$name"
+        if [[ "$name" == "@" ]]; then
+            domain_name="$zone"
+        elif [[ "$name" != *".$zone" ]]; then
+            domain_name="$name.$zone"
+        fi
+        
+        local data="token=${DNS_TOKEN}&zone=${zone}&domain=${domain_name}&type=${type}"
+        
+        case "$type" in
+            A|AAAA)
+                data="${data}&ipAddress=${value}"
+                ;;
+            CNAME)
+                data="${data}&cname=${value}"
+                ;;
+            MX)
+                data="${data}&exchange=${value}&preference=10"
+                ;;
+            TXT)
+                data="${data}&text=${value}"
+                ;;
+            NS)
+                data="${data}&nameServer=${value}"
+                ;;
+            PTR)
+                data="${data}&ptrName=${value}"
+                ;;
+            *)
+                ((++error_count))
+                error_details="${error_details}Unsupported type '$type' for $name.$zone; "
+                print_debug "Line $line_num: ERROR - Unsupported record type: $type"
+                continue
+                ;;
+        esac
+        
+        # Call API directly
+        local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/zones/records/delete"
+        print_debug "Line $line_num: API URL: $url"
+        print_debug "Line $line_num: API data: $data"
+        
+        local response=""
+        
+        if [[ -n "$DNS_TOKEN" ]]; then
+            response=$(curl -s -X POST "$url" -H "Authorization: Bearer $DNS_TOKEN" -d "$data")
+        else
+            response=$(curl -s -X POST "$url" -d "$data")
+        fi
+        
+        print_debug "Line $line_num: API response: $response"
+        
+        if echo "$response" | grep -q '"status":"ok"'; then
+            ((++deleted_records))
+            print_debug "Line $line_num: SUCCESS - Record deleted (total: $deleted_records)"
+        else
+            ((++error_count))
+            local err_msg=$(echo "$response" | jq -r '.errorMessage' 2>/dev/null || echo "Unknown error")
+            error_details="${error_details}Failed $name.$zone ($type): $err_msg; "
+            print_debug "Line $line_num: ERROR - Failed to delete record: $err_msg"
+        fi
+        
+    done < <(cat "$file")
+    
+    print_debug "Deletion complete - Total lines: $line_num, Processed: $processed_lines, Skipped: $skipped_lines"
+    
+    # Construct JSON output
+    local message="Success"
+    if [[ $error_count -gt 0 ]]; then
+        message="Completed with errors. Details: $error_details"
+    fi
+    
+    # Sanitize message for JSON
+    message=${message//\"/\\\"}
+    
+    echo "{
+  \"Deleted Records\": $deleted_records,
+  \"Errors\": $error_count,
+  \"Message\": \"$message\"
+}"
+}
+
 ################################################################################
 # Server Management Functions
 ################################################################################
@@ -2590,6 +2768,7 @@ show_help_dns() {
     echo -e "    delete-record <zone> <name> <type> [value]"
     echo -e "                                    Delete DNS record"
     echo -e "    import-records <file> [--ptr]   Import records from CSV file"
+    echo -e "    delete-records <file>           Delete records from CSV file"
     echo -e "    "
     echo -e "    server-status                   Check if server is running"
     echo -e "    server-stats                    Get server statistics"
@@ -3130,6 +3309,9 @@ main() {
             ;;
         import-records)
             cmd_import_records "$@"
+            ;;
+        delete-records)
+            cmd_delete_records "$@"
             ;;
         
         # Server Management
