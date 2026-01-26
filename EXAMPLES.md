@@ -1,6 +1,6 @@
 # Technitium DNS Manager - Examples
 
-**Version**: 1.1.0
+**Version**: 1.2.0
 
 This document provides comprehensive examples for all `tdns-mgr` commands, organized by category.
 
@@ -105,13 +105,58 @@ tdns-mgr --help --verbose
 
 ### Login to DNS Server
 
+The `login` command supports both interactive and non-interactive modes. It can accept all configuration values via command-line arguments or prompt for them interactively.
+
+#### First-Time Setup (No Config File Exists)
+
 ```bash
-# Interactive login (prompts for password)
+# Interactive setup - prompts for all required values
+# (server, port, protocol, username, password)
 tdns-mgr login
 
-# Non-interactive login using environment variable
+# Non-interactive setup with all parameters
+tdns-mgr login -s dns.example.com -P 5380 --protocol https -u admin -p mypassword
+
+# Partial setup - prompts only for missing values
+tdns-mgr login -s dns.example.com -p mypassword
+```
+
+#### Login with Existing Config
+
+When a configuration file exists, `login` uses the saved values and only prompts for the password:
+
+```bash
+# Login with existing config (only prompts for password)
+tdns-mgr login
+
+# Login with password as argument (no prompts)
+tdns-mgr login -p mypassword
+
+# Login using environment variable (no prompts)
 DNS_PASS="admin" tdns-mgr login
 ```
+
+#### Update Existing Configuration
+
+```bash
+# Force interactive update of existing configuration
+# Prompts for all values with current values as defaults
+tdns-mgr login --update
+
+# Change only specific values
+tdns-mgr login -s new-dns-server.com -p mypassword
+tdns-mgr login -P 8080 -p mypassword
+tdns-mgr login -u newuser -p mypassword
+```
+
+#### Command-Line Options
+
+- `-s, --server SERVER` - DNS server address
+- `-P, --port PORT` - DNS server port
+- `--protocol PROTOCOL` - Protocol (http or https)
+- `-u, --user USER` - Username
+- `-p, --password PASSWORD` - Password
+- `--update` - Force update of existing configuration
 
 ### Logout
 

@@ -1,6 +1,6 @@
 # Technitium DNS Manager (tdns-mgr)
 
-**Version**: 1.1.1  
+**Version**: 1.2.0  
 **Author**: Burke Azbill  
 **API Reference**: [Technitium DNS Server API](https://github.com/TechnitiumSoftware/DnsServer/blob/master/APIDOCS.md)
 
@@ -82,25 +82,60 @@ The examples cover:
 
 ## Quick Start
 
-1. **Configure Connection**:
+The script supports flexible configuration and authentication:
 
-    ```bash
-    tdns-mgr config set server dns.example.com
-    tdns-mgr config set user admin
-    ```
+### First-Time Setup
 
-2. **Login**:
+**Option 1: Interactive Setup (Recommended)**
 
-    ```bash
-    tdns-mgr login
-    ```
+```bash
+# Run login - prompts for all required values
+tdns-mgr login
+```
 
-3. **Run Commands**:
+**Option 2: Non-Interactive Setup**
 
-    ```bash
-    tdns-mgr list-zones
-    tdns-mgr server-stats
-    ```
+```bash
+# Provide all configuration via command-line
+tdns-mgr login -s dns.example.com -P 5380 --protocol https -u admin -p mypassword
+```
+
+**Option 3: Using config command**
+
+```bash
+# Set configuration values first
+tdns-mgr config set server dns.example.com
+tdns-mgr config set user admin
+
+# Then login (prompts only for password)
+tdns-mgr login
+```
+
+### Subsequent Usage
+
+Once configured, you can simply run:
+
+```bash
+# Login with saved config (prompts only for password)
+tdns-mgr login
+
+# Or use password argument for automation
+tdns-mgr login -p mypassword
+
+# Then run commands
+tdns-mgr list-zones
+tdns-mgr server-stats
+```
+
+### Update Existing Configuration
+
+```bash
+# Force interactive update of all configuration values
+tdns-mgr login --update
+
+# Or update specific values
+tdns-mgr login -s new-server.com -p mypassword
+```
 
 ### Help System
 
@@ -152,17 +187,20 @@ tdns-mgr completion fish
 **Bash Completion:**
 
 System-wide installation (requires sudo):
+
 ```bash
 tdns-mgr completion bash | sudo tee /etc/bash_completion.d/tdns-mgr > /dev/null
 ```
 
 Per-user installation:
+
 ```bash
 mkdir -p ~/.local/share/bash-completion/completions
 tdns-mgr completion bash > ~/.local/share/bash-completion/completions/tdns-mgr
 ```
 
 Then reload your shell or source the completion file:
+
 ```bash
 source ~/.local/share/bash-completion/completions/tdns-mgr
 ```
@@ -170,17 +208,20 @@ source ~/.local/share/bash-completion/completions/tdns-mgr
 **Zsh Completion:**
 
 System-wide installation (requires sudo):
+
 ```bash
 tdns-mgr completion zsh | sudo tee /usr/share/zsh/site-functions/_tdns-mgr > /dev/null
 ```
 
 Per-user installation:
+
 ```bash
 mkdir -p ~/.zsh/completion
 tdns-mgr completion zsh > ~/.zsh/completion/_tdns-mgr
 ```
 
 Add to your `~/.zshrc` if not already present:
+
 ```bash
 fpath=(~/.zsh/completion $fpath)
 autoload -Uz compinit
@@ -188,6 +229,7 @@ compinit
 ```
 
 Then reload your shell:
+
 ```bash
 exec zsh
 ```
@@ -195,17 +237,20 @@ exec zsh
 **Fish Completion:**
 
 System-wide installation (requires sudo):
+
 ```bash
 tdns-mgr completion fish | sudo tee /usr/share/fish/vendor_completions.d/tdns-mgr.fish > /dev/null
 ```
 
 Per-user installation:
+
 ```bash
 mkdir -p ~/.config/fish/completions
 tdns-mgr completion fish > ~/.config/fish/completions/tdns-mgr.fish
 ```
 
 Fish will automatically load the completion on next shell start or you can reload:
+
 ```bash
 source ~/.config/fish/completions/tdns-mgr.fish
 ```
@@ -283,8 +328,11 @@ For issues or questions:
 
 > [!NOTE]
 I found other CLI tools after I had written this one. I have not used these.
+
 - **tdns CLI** - Cross platform management tool written in Golang and is available at [https://github.com/mbevc1/tdns](https://github.com/mbevc1/tdns).
-- **TechnitiumDNS-Scripts** - Interactive Python script written to manage DHCP Scope Reservations, available at [https://github.com/mbevc1/tdns](https://github.com/mbevc1/tdns)
+- **TechnitiumDNS-Scripts** - Interactive Python script written to manage DHCP Scope Reservations, available at [https://github.com/krozgrov/TechnitiumDNS-Scripts](https://github.com/krozgrov/TechnitiumDNS-Scripts)
+
+- **Technitium DHCP Pool Monitor** - A pair of bash scripts written to keep Zabbix updated on lease pool utilization, available at [https://github.com/Bubbgump209/Technitium-DHCP-Monitoring](https://github.com/Bubbgump209/Technitium-DHCP-Monitoring)
 
 ## License
 

@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # Version
-VERSION="1.1.1"
+VERSION="1.2.0"
 
 # Colors for output (check if terminal supports colors)
 if [[ -t 1 ]]; then
@@ -311,20 +311,148 @@ check_dependencies() {
 ################################################################################
 
 cmd_login() {
-    print_info "Logging in to DNS Server at ${DNS_SERVER}:${DNS_PORT}"
+    local update_config=false
+    local server=""
+    local port=""
+    local protocol=""
+    local user=""
+    local password=""
     
-    if [[ -z "$DNS_PASS" ]]; then
-        read -sp "Password: " DNS_PASS
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -s|--server)
+                server="$2"
+                shift 2
+                ;;
+            -P|--port)
+                port="$2"
+                shift 2
+                ;;
+            --protocol)
+                protocol="$2"
+                shift 2
+                ;;
+            -u|--user)
+                user="$2"
+                shift 2
+                ;;
+            -p|--password)
+                password="$2"
+                shift 2
+                ;;
+            --update)
+                update_config=true
+                shift
+                ;;
+            *)
+                print_error "Unknown login option: $1"
+                echo "Usage: tdns-mgr login [-s|--server SERVER] [-P|--port PORT] [--protocol PROTOCOL] [-u|--user USER] [-p|--password PASSWORD] [--update]"
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Check if config exists and if we should use it or prompt for updates
+    local config_exists=false
+    if [[ -f "$USER_CONFIG_FILE" || -f "$SYSTEM_CONFIG_FILE" || -f "$SCRIPT_CONFIG_FILE" ]]; then
+        config_exists=true
+    fi
+    
+    # If config exists and --update not specified, and no args provided, just use existing config
+    if [[ "$config_exists" == "true" && "$update_config" == "false" && -z "$server" && -z "$port" && -z "$protocol" && -z "$user" && -z "$password" ]]; then
+        # Try to login with existing config
+        if [[ -z "$DNS_TOKEN" ]]; then
+            # Need to get password to login
+            if [[ -z "$DNS_PASS" ]]; then
+                read -sp "Password for ${DNS_USER}: " DNS_PASS
+                echo "" >&2
+            fi
+            password="$DNS_PASS"
+        else
+            # Already have token, just verify it works
+            print_info "Using existing authentication token"
+            local response=$(api_get "user/session" "token=${DNS_TOKEN}")
+            if echo "$response" | grep -q '"status":"ok"'; then
+                print_success "Already logged in as ${DNS_USER}"
+                return 0
+            else
+                print_warning "Existing token is invalid, need to re-authenticate"
+                DNS_TOKEN=""
+                if [[ -z "$DNS_PASS" ]]; then
+                    read -sp "Password for ${DNS_USER}: " DNS_PASS
+                    echo "" >&2
+                fi
+                password="$DNS_PASS"
+            fi
+        fi
+    fi
+    
+    # Interactive prompts for missing values
+    if [[ -z "$server" ]]; then
+        if [[ "$config_exists" == "false" || "$update_config" == "true" ]]; then
+            read -p "DNS Server [$DNS_SERVER]: " server
+            server="${server:-$DNS_SERVER}"
+        else
+            server="$DNS_SERVER"
+        fi
+    fi
+    
+    if [[ -z "$port" ]]; then
+        if [[ "$config_exists" == "false" || "$update_config" == "true" ]]; then
+            read -p "DNS Port [$DNS_PORT]: " port
+            port="${port:-$DNS_PORT}"
+        else
+            port="$DNS_PORT"
+        fi
+    fi
+    
+    if [[ -z "$protocol" ]]; then
+        if [[ "$config_exists" == "false" || "$update_config" == "true" ]]; then
+            read -p "Protocol (http/https) [$DNS_PROTOCOL]: " protocol
+            protocol="${protocol:-$DNS_PROTOCOL}"
+        else
+            protocol="$DNS_PROTOCOL"
+        fi
+    fi
+    
+    if [[ -z "$user" ]]; then
+        if [[ "$config_exists" == "false" || "$update_config" == "true" ]]; then
+            read -p "Username [$DNS_USER]: " user
+            user="${user:-$DNS_USER}"
+        else
+            user="$DNS_USER"
+        fi
+    fi
+    
+    if [[ -z "$password" ]]; then
+        read -sp "Password: " password
         echo "" >&2
     fi
+    
+    # Validate required fields
+    if [[ -z "$server" || -z "$port" || -z "$protocol" || -z "$user" || -z "$password" ]]; then
+        print_error "All fields are required for login"
+        exit 1
+    fi
+    
+    # Update variables
+    DNS_SERVER="$server"
+    DNS_PORT="$port"
+    DNS_PROTOCOL="$protocol"
+    DNS_USER="$user"
+    DNS_PASS="$password"
+    
+    print_info "Logging in to DNS Server at ${DNS_SERVER}:${DNS_PORT}"
     
     local response=$(api_post "user/login" "user=${DNS_USER}&pass=${DNS_PASS}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         DNS_TOKEN=$(echo "$response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
         save_config
-        print_success "Successfully logged in"
+        print_success "Successfully logged in as ${DNS_USER}"
         print_info "Token: ${DNS_TOKEN:0:20}..."
+        print_info "Configuration saved to: ${USER_CONFIG_FILE}"
     else
         print_error "Login failed"
         echo "$response" | jq '.' 2>/dev/null || echo "$response"
@@ -2723,18 +2851,36 @@ show_summary() {
 show_help_authentication() {
     echo -e ""
     echo -e "${BLUE}AUTHENTICATION COMMANDS:${NC}"
-    echo -e "    login                           Login to DNS server"
+    echo -e "    login [options]                 Login to DNS server"
+    echo -e "        -s, --server SERVER         DNS server address"
+    echo -e "        -P, --port PORT             DNS server port"
+    echo -e "        --protocol PROTOCOL         Protocol (http/https)"
+    echo -e "        -u, --user USER             Username"
+    echo -e "        -p, --password PASSWORD     Password"
+    echo -e "        --update                    Force update of existing config"
     echo -e "    logout                          Logout from DNS server"
     echo -e "    change-password <new_pass>      Change user password"
     echo -e "    check-update                    Check for DNS server updates"
     echo -e "    config [show|set]               Show or set configuration"
     echo -e ""
     echo -e "${YELLOW}EXAMPLES:${NC}"
-    echo -e "    ${GREEN}# Interactive login${NC}"
+    echo -e "    ${GREEN}# First-time interactive setup (prompts for all values)${NC}"
     echo -e "    tdns-mgr.sh login"
     echo -e ""
-    echo -e "    ${GREEN}# Non-interactive login using environment variable${NC}"
-    echo -e "    DNS_PASS=mypassword tdns-mgr.sh login"
+    echo -e "    ${GREEN}# Login with existing config (only prompts for password)${NC}"
+    echo -e "    tdns-mgr.sh login"
+    echo -e ""
+    echo -e "    ${GREEN}# Non-interactive login with all parameters${NC}"
+    echo -e "    tdns-mgr.sh login -s dns.example.com -P 5380 --protocol https -u admin -p mypassword"
+    echo -e ""
+    echo -e "    ${GREEN}# Login with password as argument${NC}"
+    echo -e "    tdns-mgr.sh login -p mypassword"
+    echo -e ""
+    echo -e "    ${GREEN}# Update existing configuration interactively${NC}"
+    echo -e "    tdns-mgr.sh login --update"
+    echo -e ""
+    echo -e "    ${GREEN}# Change only the server address${NC}"
+    echo -e "    tdns-mgr.sh login -s new-dns-server.com -p mypassword"
     echo -e ""
     echo -e "    ${GREEN}# Change password${NC}"
     echo -e "    tdns-mgr.sh change-password newStrongPassword123"
