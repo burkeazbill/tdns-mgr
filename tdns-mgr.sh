@@ -227,11 +227,79 @@ api_post() {
     api_call "$endpoint" -d "$@"
 }
 
+# Check if all necessary credentials are available for auto-authentication
+has_complete_credentials() {
+    # Check DNS_SERVER, DNS_PORT, DNS_PROTOCOL - always needed
+    if [[ -z "$DNS_SERVER" || -z "$DNS_PORT" || -z "$DNS_PROTOCOL" ]]; then
+        return 1
+    fi
+    
+    # Either have a valid token OR have both user and password
+    if [[ -n "$DNS_TOKEN" ]]; then
+        return 0
+    fi
+    
+    if [[ -n "$DNS_USER" && -n "$DNS_PASS" ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Attempt automatic authentication if complete credentials are available
+auto_authenticate() {
+    if ! has_complete_credentials; then
+        return 1
+    fi
+    
+    # If we already have a token, verify it works
+    if [[ -n "$DNS_TOKEN" ]]; then
+        print_debug "Verifying stored authentication token"
+        local response=$(api_call "user/profile")
+        
+        if echo "$response" | grep -q '"status":"ok"'; then
+            print_debug "Token verification successful"
+            return 0
+        else
+            print_debug "Token verification failed, token may be expired"
+            DNS_TOKEN=""
+            # Fall through to try password if available
+        fi
+    fi
+    
+    # If no valid token, try to authenticate with password
+    if [[ -n "$DNS_USER" && -n "$DNS_PASS" && -z "$DNS_TOKEN" ]]; then
+        print_debug "Auto-authenticating with stored credentials"
+        local response=$(api_post "user/login" "user=${DNS_USER}&pass=${DNS_PASS}")
+        
+        if echo "$response" | grep -q '"status":"ok"'; then
+            DNS_TOKEN=$(echo "$response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+            print_debug "Auto-authentication successful"
+            return 0
+        else
+            print_debug "Auto-authentication failed"
+            return 1
+        fi
+    fi
+    
+    return 1
+}
+
 # Check if authenticated
 check_auth() {
     if [[ -z "$DNS_TOKEN" ]]; then
-        print_error "Not authenticated. Please run: tdns-mgr.sh login"
-        exit 1
+        # Attempt auto-authentication if credentials are available
+        if ! auto_authenticate; then
+            print_error "Not authenticated. Please run: tdns-mgr.sh login"
+            exit 1
+        fi
+    else
+        # Verify existing token is still valid
+        if ! auto_authenticate; then
+            # If token validation fails, auto_authenticate will try password fallback
+            print_error "Authentication failed"
+            exit 1
+        fi
     fi
 }
 
