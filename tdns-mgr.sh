@@ -209,11 +209,11 @@ api_call() {
 
     local response
     if [[ -n "$DNS_TOKEN" ]]; then
-        response=$(curl -s -X POST "$url" \
+        response=$(curl -sk -X POST "$url" \
             -H "Authorization: Bearer $DNS_TOKEN" \
             "$@")
     else
-        response=$(curl -s -X POST "$url" "$@")
+        response=$(curl -sk -X POST "$url" "$@")
     fi
     
     print_debug "API Response: $response"
@@ -255,7 +255,7 @@ auto_authenticate() {
     # If we already have a token, verify it works
     if [[ -n "$DNS_TOKEN" ]]; then
         print_debug "Verifying stored authentication token"
-        local response=$(api_call "user/profile")
+        local response=$(api_post "user/session/get" "token=${DNS_TOKEN}")
         
         if echo "$response" | grep -q '"status":"ok"'; then
             print_debug "Token verification successful"
@@ -440,7 +440,7 @@ cmd_login() {
         else
             # Already have token, just verify it works
             print_info "Using existing authentication token"
-            local response=$(api_get "user/session" "token=${DNS_TOKEN}")
+            local response=$(api_post "user/session" "token=${DNS_TOKEN}")
             if echo "$response" | grep -q '"status":"ok"'; then
                 print_success "Already logged in as ${DNS_USER}"
                 return 0
@@ -559,7 +559,7 @@ cmd_check_update() {
     check_auth
     print_info "Checking for DNS server updates..."
     
-    local response=$(api_get "user/checkForUpdate" "token=${DNS_TOKEN}")
+    local response=$(api_post "user/checkForUpdate" "token=${DNS_TOKEN}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         local update_available=$(echo "$response" | jq -r '.response.updateAvailable // false')
