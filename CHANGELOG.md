@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 1.2.1 (2026-03-27)
+## Version 1.2.2 (2026-04-01)
 
 ### Major Enhancements - Login & Configuration
 
@@ -59,6 +59,21 @@ tdns-mgr login --update
 2. Password can now be passed via `-p` argument for automation
 3. All required config values can be provided via login command
 4. Existing configurations can be updated via `--update` flag
+
+### Security Enhancements
+
+- **TLS Verification**: Added an `--insecure` CLI flag and `INSECURE_TDNS` environment variable to explicitly allow bypassing TLS certificate verification. The script now enforces secure TLS verification by default (removed hardcoded `curl -sk`).
+- **Secure Configuration Directory**: The configuration directory (`~/.config/tdns-mgr`) is now created with strict `700` permissions.
+
+### Performance Improvements
+
+- **CSV Parsing Optimization**: Greatly improved performance for `import-records` and `delete-records` by replacing the line-by-line `awk` subshell execution with a single, fast `awk` pass that generates a temporary pipe-delimited file.
+- **Useless Use of Cat (UUOC)**: Replaced `done < <(cat "$file")` with direct file redirection `done < "$file"`.
+
+### Bug Fixes
+
+- **API Payload Corruption**: Fixed a critical bug where API payloads were built using insecure string concatenation (e.g. `user=$DNS_USER&pass=$DNS_PASS`), which corrupted requests if values contained `&`, `=`, or `+`. The script now securely URL-encodes all parameters using `curl --data-urlencode`.
+- **JSON Parsing**: The `login` command now properly uses `jq` to parse the authentication token, replacing brittle `grep` and `cut` commands.
 
 ---
 

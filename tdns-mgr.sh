@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # Version
-VERSION="1.2.1"
+VERSION="1.2.2"
 
 # Colors for output (check if terminal supports colors)
 if [[ -t 1 ]]; then
@@ -52,6 +52,7 @@ DNS_PROTOCOL="${DNS_PROTOCOL:-https}"
 DNS_TOKEN="${DNS_TOKEN:-}"
 DNS_USER="${DNS_USER:-admin}"
 DNS_PASS="${DNS_PASS:-}"
+INSECURE_TLS="${INSECURE_TDNS:-false}"
 QUIET="${QUIET:-false}"
 DEBUG="${DEBUG:-false}"
 
@@ -157,6 +158,7 @@ save_config() {
     local config_dir=$(dirname "$USER_CONFIG_FILE")
     if [[ ! -d "$config_dir" ]]; then
         mkdir -p "$config_dir"
+        chmod 700 "$config_dir"
         if [[ $? -ne 0 ]]; then
             print_error "Failed to create config directory: $config_dir"
             return 1
@@ -207,13 +209,18 @@ api_call() {
         print_debug "Executing: $debug_cmd ${masked_args[*]}"
     fi
 
+    local curl_opts=("-s")
+    if [[ "$INSECURE_TLS" == "true" ]]; then
+        curl_opts+=("-k")
+    fi
+    
     local response
     if [[ -n "$DNS_TOKEN" ]]; then
-        response=$(curl -sk -X POST "$url" \
+        response=$(curl "${curl_opts[@]}" -X POST "$url" \
             -H "Authorization: Bearer $DNS_TOKEN" \
             "$@")
     else
-        response=$(curl -sk -X POST "$url" "$@")
+        response=$(curl "${curl_opts[@]}" -X POST "$url" "$@")
     fi
     
     print_debug "API Response: $response"
@@ -224,7 +231,11 @@ api_call() {
 api_post() {
     local endpoint="$1"
     shift
-    api_call "$endpoint" -d "$@"
+    local curl_args=()
+    for arg in "$@"; do
+        curl_args+=("--data-urlencode" "$arg")
+    done
+    api_call "$endpoint" "${curl_args[@]}"
 }
 
 # Check if all necessary credentials are available for auto-authentication
@@ -270,7 +281,7 @@ auto_authenticate() {
     # If no valid token, try to authenticate with password
     if [[ -n "$DNS_USER" && -n "$DNS_PASS" && -z "$DNS_TOKEN" ]]; then
         print_debug "Auto-authenticating with stored credentials"
-        local response=$(api_post "user/login" "user=${DNS_USER}&pass=${DNS_PASS}")
+        local response=$(api_post "user/login" "user=${DNS_USER}" "pass=${DNS_PASS}")
         
         if echo "$response" | grep -q '"status":"ok"'; then
             DNS_TOKEN=$(echo "$response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
@@ -513,10 +524,10 @@ cmd_login() {
     
     print_info "Logging in to DNS Server at ${DNS_SERVER}:${DNS_PORT}"
     
-    local response=$(api_post "user/login" "user=${DNS_USER}&pass=${DNS_PASS}")
+    local response=$(api_post "user/login" "user=${DNS_USER}" "pass=${DNS_PASS}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
-        DNS_TOKEN=$(echo "$response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+        DNS_TOKEN=$(echo "$response" | jq -r '.token')
         save_config
         print_success "Successfully logged in as ${DNS_USER}"
         print_info "Token: ${DNS_TOKEN:0:20}..."
@@ -545,7 +556,7 @@ cmd_change_password() {
         echo "" >&2
     fi
     
-    local response=$(api_post "user/changePassword" "token=${DNS_TOKEN}&pass=${new_pass}")
+    local response=$(api_post "user/changePassword" "token=${DNS_TOKEN}" "pass=${new_pass}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Password changed successfully"
@@ -610,7 +621,7 @@ cmd_create_zone() {
     
     print_info "Creating zone: $zone (Type: $type)"
     
-    local response=$(api_post "zones/create" "token=${DNS_TOKEN}&zone=${zone}&type=${type}")
+    local response=$(api_post "zones/create" "token=${DNS_TOKEN}" "zone=${zone}" "type=${type}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone created: $zone"
@@ -637,7 +648,7 @@ cmd_delete_zone() {
         exit 0
     fi
     
-    local response=$(api_post "zones/delete" "token=${DNS_TOKEN}&zone=${zone}")
+    local response=$(api_post "zones/delete" "token=${DNS_TOKEN}" "zone=${zone}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone deleted: $zone"
@@ -656,7 +667,7 @@ cmd_enable_zone() {
         exit 1
     fi
     
-    local response=$(api_post "zones/enable" "token=${DNS_TOKEN}&zone=${zone}")
+    local response=$(api_post "zones/enable" "token=${DNS_TOKEN}" "zone=${zone}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone enabled: $zone"
@@ -675,7 +686,7 @@ cmd_disable_zone() {
         exit 1
     fi
     
-    local response=$(api_post "zones/disable" "token=${DNS_TOKEN}&zone=${zone}")
+    local response=$(api_post "zones/disable" "token=${DNS_TOKEN}" "zone=${zone}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone disabled: $zone"
@@ -699,7 +710,7 @@ cmd_export_zone() {
     
     local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/zones/export?token=${DNS_TOKEN}&zone=${zone}&format=Bind"
     
-    if curl -s -f "$url" -o "$file"; then
+    if curl ${INSECURE_TLS:+-k} -s -f "$url" -o "$file"; then
         print_success "Zone exported to $file"
     else
         print_error "Failed to export zone"
@@ -726,7 +737,7 @@ cmd_import_zone() {
     
     local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/zones/import?token=${DNS_TOKEN}&zone=${zone}&overwrite=true"
     
-    local response=$(curl -s -X POST "$url" -F "file=@$file")
+    local response=$(curl ${INSECURE_TLS:+-k} -s -X POST "$url" -F "file=@$file")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone imported successfully"
@@ -750,7 +761,7 @@ cmd_export_zones() {
     
     local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/settings/backup?token=${DNS_TOKEN}&zones=true"
     
-    if curl -s -f "$url" -o "$file"; then
+    if curl ${INSECURE_TLS:+-k} -s -f "$url" -o "$file"; then
         print_success "All zones exported to $file"
     else
         print_error "Failed to export zones"
@@ -784,7 +795,7 @@ cmd_import_zones() {
     
     local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/settings/restore?token=${DNS_TOKEN}&zones=true&deleteExistingFiles=true"
     
-    local response=$(curl -s -X POST "$url" -F "file=@$file")
+    local response=$(curl ${INSECURE_TLS:+-k} -s -X POST "$url" -F "file=@$file")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zones imported successfully"
@@ -809,7 +820,7 @@ cmd_list_records() {
     
     print_info "Listing records for zone: $zone"
     
-    local response=$(api_post "zones/records/get" "token=${DNS_TOKEN}&domain=${zone}&listZone=true")
+    local response=$(api_post "zones/records/get" "token=${DNS_TOKEN}" "domain=${zone}" "listZone=true")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -849,34 +860,34 @@ cmd_add_record() {
         domain_name="$name.$zone"
     fi
     
-    local data="token=${DNS_TOKEN}&zone=${zone}&domain=${domain_name}&type=${type}&ttl=${ttl}"
+    local data=("token=${DNS_TOKEN}" "zone=${zone}" "domain=${domain_name}" "type=${type}" "ttl=${ttl}")
     
     if [[ "$type" == "A" || "$type" == "AAAA" ]]; then
         if [[ "$create_ptr" == "true" ]]; then
-            data="${data}&ptr=true&createPtrZone=true"
+            data+=("ptr=true" "createPtrZone=true")
             print_info "Enabled automatic PTR record creation"
         fi
     fi
     
     case "$type" in
         A|AAAA)
-            data="${data}&ipAddress=${value}"
+            data+=("ipAddress=${value}")
             ;;
         CNAME)
-            data="${data}&cname=${value}"
+            data+=("cname=${value}")
             ;;
         MX)
             local priority="${6:-10}"
-            data="${data}&exchange=${value}&preference=${priority}"
+            data+=("exchange=${value}" "preference=${priority}")
             ;;
         TXT)
-            data="${data}&text=${value}"
+            data+=("text=${value}")
             ;;
         NS)
-            data="${data}&nameServer=${value}"
+            data+=("nameServer=${value}")
             ;;
         PTR)
-            data="${data}&ptrName=${value}"
+            data+=("ptrName=${value}")
             ;;
         *)
             print_error "Unsupported record type: $type"
@@ -884,7 +895,7 @@ cmd_add_record() {
             ;;
     esac
     
-    local response=$(api_post "zones/records/add" "$data")
+    local response=$(api_post "zones/records/add" "${data[@]}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Record added successfully"
@@ -910,11 +921,11 @@ cmd_update_record() {
     
     print_info "Updating $type record: $name.$zone"
     
-    local data="token=${DNS_TOKEN}&zone=${zone}&domain=${name}&type=${type}&ttl=${ttl}"
+    local data=("token=${DNS_TOKEN}" "zone=${zone}" "domain=${name}" "type=${type}" "ttl=${ttl}")
     
     case "$type" in
         A|AAAA)
-            data="${data}&oldIpAddress=${old_value}&newIpAddress=${new_value}"
+            data+=("oldIpAddress=${old_value}" "newIpAddress=${new_value}")
             ;;
         *)
             print_error "Update not implemented for type: $type"
@@ -922,7 +933,7 @@ cmd_update_record() {
             ;;
     esac
     
-    local response=$(api_post "zones/records/update" "$data")
+    local response=$(api_post "zones/records/update" "${data[@]}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Record updated successfully"
@@ -946,20 +957,20 @@ cmd_delete_record() {
     
     print_warning "Deleting $type record: $name.$zone"
     
-    local data="token=${DNS_TOKEN}&zone=${zone}&domain=${name}&type=${type}"
+    local data=("token=${DNS_TOKEN}" "zone=${zone}" "domain=${name}" "type=${type}")
     
     if [[ -n "$value" ]]; then
         case "$type" in
             A|AAAA)
-                data="${data}&ipAddress=${value}"
+                data+=("ipAddress=${value}")
                 ;;
             CNAME)
-                data="${data}&cname=${value}"
+                data+=("cname=${value}")
                 ;;
         esac
     fi
     
-    local response=$(api_post "zones/records/delete" "$data")
+    local response=$(api_post "zones/records/delete" "${data[@]}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Record deleted successfully"
@@ -1029,7 +1040,8 @@ cmd_import_records() {
         local test_line_count=0
         while IFS= read -r _test_line; do
             ((++test_line_count))
-        done < "$file"
+        done < "$tmp_file"
+    rm -f "$tmp_file"
         print_debug "Test read completed: $test_line_count lines read successfully"
     fi
     
@@ -1037,72 +1049,52 @@ cmd_import_records() {
     print_debug "Loop will read from: $file"
     print_debug "File descriptor test: $(test -f "$file" && echo 'EXISTS' || echo 'MISSING')"
     
-    # Use cat to pipe into while loop instead of file redirection
-    # This avoids potential file descriptor issues
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        ((++line_num))
-        print_debug ">>> ENTERED LOOP - Processing line $line_num"
-        print_debug "Line $line_num: Raw input: '$line'"
-        
-        # Remove carriage return (Window compat)
-        line="${line//$'\r'/}"
-        print_debug "Line $line_num: After CR removal: '$line'"
-        
-        # Skip comments and empty lines
-        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
-            print_debug "Line $line_num: Skipped (empty or comment)"
-            ((++skipped_lines))
-            continue
-        fi
-        
-        # Skip header if it looks like header
-        if [[ "$line_num" -eq 1 && "$line" =~ ^zone,name,type,value ]]; then
-            print_debug "Line $line_num: Skipped (header)"
-            ((++skipped_lines))
-            continue
-        fi
-        
-        # Parse CSV using awk to handle potential quoting better than straight read
-        # This will convert CSV line to pipe-delimited values for safe reading by bash
-        # A simple state-machine parser in awk to handle quotes
-        print_debug "Line $line_num: Parsing with awk..."
-        
-        # Try AWK parsing with error handling
-        parsed_line=$(echo "$line" | awk '{
-            # Fallback for non-gawk (standard awk does not support FPAT)
-            # We use a simpler strategy: replace "," within quotes with placeholder if needed
-            # For this script, we assume values handled by simple split unless complex
+    local tmp_file=$(mktemp)
+    awk '
+        {
+            orig_line=$0
+            sub(/
+$/, "", orig_line)
+            if (orig_line == "" || orig_line ~ /^[[:space:]]*#/) {
+                print NR "|SKIP|"
+                next
+            }
+            if (NR == 1 && orig_line ~ /^zone,name,type,value/) {
+                print NR "|SKIP|"
+                next
+            }
             
-            # Simple standard split for max compatibility as requested
-            # We output using pipe delimiter which is safer for our read
-            # If quotes exist, we strip them
-            
-            # This is a basic CSV parser that handles quoted comma fields
-            $0=$0","; 
+            $0=orig_line","; 
+            line=NR "|"
             while($0) {
                 if ($0 ~ /^"[^"]*"|^[^",]*/) { 
                     match($0, /^"[^"]*"|^[^",]*/)
                     f=substr($0, RSTART, RLENGTH)
                     gsub(/^"|"$/, "", f) 
-                    printf "%s|", f
+                    line = line f "|"
                     $0=substr($0, RLENGTH+2)
                 } else {
-                    printf "|"
+                    line = line "|"
                     $0=substr($0, 2)
                 }
             }
-        }' 2>&1)
+            print line
+        }
+    ' "$file" > "$tmp_file"
+
+    while IFS='|' read -r p_line_num p_zone p_name p_type p_value _; do
+        line_num="$p_line_num"
         
-        local awk_exit=$?
-        if [[ $awk_exit -ne 0 ]]; then
-            print_debug "Line $line_num: AWK failed with exit code $awk_exit, trying simple parsing"
-            # Fallback to simple comma split
-            parsed_line=$(echo "$line" | tr ',' '|')
+        if [[ "$p_zone" == "SKIP" ]]; then
+            ((++skipped_lines))
+            continue
         fi
         
-        print_debug "Line $line_num: Parsed result: '$parsed_line'"
-        
-        IFS='|' read -r zone name type value _ <<< "$parsed_line"
+        zone="$p_zone"
+        name="$p_name"
+        type="$p_type"
+        value="$p_value"
+
         print_debug "Line $line_num: Extracted fields - zone='$zone', name='$name', type='$type', value='$value'"
         
         # Validation
@@ -1128,37 +1120,37 @@ cmd_import_records() {
             print_debug "Line $line_num: Name already includes zone: $domain_name"
         fi
         
-        local data="token=${DNS_TOKEN}&zone=${zone}&domain=${domain_name}&type=${type}&ttl=3600"
+        local data=("token=${DNS_TOKEN}" "zone=${zone}" "domain=${domain_name}" "type=${type}" "ttl=3600")
         
         # PTR Logic
         if [[ "$create_ptr" == "true" && ("$type" == "A" || "$type" == "AAAA") ]]; then
-            data="${data}&ptr=true&createPtrZone=true"
+            data+=("ptr=true" "createPtrZone=true")
             print_debug "Line $line_num: PTR record will be created"
         fi
         
         case "$type" in
             A|AAAA)
-                data="${data}&ipAddress=${value}"
+                data+=("ipAddress=${value}")
                 print_debug "Line $line_num: Record type $type - IP address: $value"
                 ;;
             CNAME)
-                data="${data}&cname=${value}"
+                data+=("cname=${value}")
                 print_debug "Line $line_num: Record type CNAME - target: $value"
                 ;;
             MX)
-                data="${data}&exchange=${value}&preference=10"
+                data+=("exchange=${value}" "preference=10")
                 print_debug "Line $line_num: Record type MX - exchange: $value, preference: 10"
                 ;;
             TXT)
-                data="${data}&text=${value}"
+                data+=("text=${value}")
                 print_debug "Line $line_num: Record type TXT - text: $value"
                 ;;
             NS)
-                data="${data}&nameServer=${value}"
+                data+=("nameServer=${value}")
                 print_debug "Line $line_num: Record type NS - nameserver: $value"
                 ;;
             PTR)
-                data="${data}&ptrName=${value}"
+                data+=("ptrName=${value}")
                 print_debug "Line $line_num: Record type PTR - pointer: $value"
                 ;;
             *)
@@ -1178,10 +1170,10 @@ cmd_import_records() {
         
         if [[ -n "$DNS_TOKEN" ]]; then
             print_debug "Line $line_num: Making authenticated API call..."
-            response=$(curl -s -X POST "$url" -H "Authorization: Bearer $DNS_TOKEN" -d "$data")
+            response=$(curl ${INSECURE_TLS:+-k} -s -X POST "$url" -H "Authorization: Bearer $DNS_TOKEN" -d "$data")
         else
             print_debug "Line $line_num: Making unauthenticated API call..."
-            response=$(curl -s -X POST "$url" -d "$data")
+            response=$(curl ${INSECURE_TLS:+-k} -s -X POST "$url" -d "$data")
         fi
         
         print_debug "Line $line_num: API response: $response"
@@ -1196,7 +1188,8 @@ cmd_import_records() {
             print_debug "Line $line_num: ERROR - Failed to add record: $err_msg"
         fi
         
-    done < <(cat "$file")
+    done < "$tmp_file"
+    rm -f "$tmp_file"
     
     print_debug "Exited while loop"
     print_debug "Import complete - Total lines: $line_num, Processed: $processed_lines, Skipped: $skipped_lines"
@@ -1258,53 +1251,52 @@ cmd_delete_records() {
     
     print_debug "Starting main processing loop..."
     
-    # Use cat to pipe into while loop instead of file redirection
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        ((++line_num))
-        print_debug ">>> ENTERED LOOP - Processing line $line_num"
-        print_debug "Line $line_num: Raw input: '$line'"
-        
-        # Remove carriage return (Window compat)
-        line="${line//$'\r'/}"
-        
-        # Skip comments and empty lines
-        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
-            print_debug "Line $line_num: Skipped (empty or comment)"
-            ((++skipped_lines))
-            continue
-        fi
-        
-        # Skip header if it looks like header
-        if [[ "$line_num" -eq 1 && "$line" =~ ^zone,name,type,value ]]; then
-            print_debug "Line $line_num: Skipped (header)"
-            ((++skipped_lines))
-            continue
-        fi
-        
-        # Parse CSV using awk (same logic as import)
-        parsed_line=$(echo "$line" | awk '{
-            $0=$0","; 
+    local tmp_file=$(mktemp)
+    awk '
+        {
+            orig_line=$0
+            sub(/
+$/, "", orig_line)
+            if (orig_line == "" || orig_line ~ /^[[:space:]]*#/) {
+                print NR "|SKIP|"
+                next
+            }
+            if (NR == 1 && orig_line ~ /^zone,name,type,value/) {
+                print NR "|SKIP|"
+                next
+            }
+            
+            $0=orig_line","; 
+            line=NR "|"
             while($0) {
                 if ($0 ~ /^"[^"]*"|^[^",]*/) { 
                     match($0, /^"[^"]*"|^[^",]*/)
                     f=substr($0, RSTART, RLENGTH)
                     gsub(/^"|"$/, "", f) 
-                    printf "%s|", f
+                    line = line f "|"
                     $0=substr($0, RLENGTH+2)
                 } else {
-                    printf "|"
+                    line = line "|"
                     $0=substr($0, 2)
                 }
             }
-        }' 2>&1)
+            print line
+        }
+    ' "$file" > "$tmp_file"
+
+    while IFS='|' read -r p_line_num p_zone p_name p_type p_value _; do
+        line_num="$p_line_num"
         
-        local awk_exit=$?
-        if [[ $awk_exit -ne 0 ]]; then
-            # Fallback to simple comma split
-            parsed_line=$(echo "$line" | tr ',' '|')
+        if [[ "$p_zone" == "SKIP" ]]; then
+            ((++skipped_lines))
+            continue
         fi
         
-        IFS='|' read -r zone name type value _ <<< "$parsed_line"
+        zone="$p_zone"
+        name="$p_name"
+        type="$p_type"
+        value="$p_value"
+
         
         # Validation
         if [[ -z "$zone" || -z "$name" || -z "$type" || -z "$value" ]]; then
@@ -1324,26 +1316,26 @@ cmd_delete_records() {
             domain_name="$name.$zone"
         fi
         
-        local data="token=${DNS_TOKEN}&zone=${zone}&domain=${domain_name}&type=${type}"
+        local data=("token=${DNS_TOKEN}" "zone=${zone}" "domain=${domain_name}" "type=${type}")
         
         case "$type" in
             A|AAAA)
-                data="${data}&ipAddress=${value}"
+                data+=("ipAddress=${value}")
                 ;;
             CNAME)
-                data="${data}&cname=${value}"
+                data+=("cname=${value}")
                 ;;
             MX)
-                data="${data}&exchange=${value}&preference=10"
+                data+=("exchange=${value}" "preference=10")
                 ;;
             TXT)
-                data="${data}&text=${value}"
+                data+=("text=${value}")
                 ;;
             NS)
-                data="${data}&nameServer=${value}"
+                data+=("nameServer=${value}")
                 ;;
             PTR)
-                data="${data}&ptrName=${value}"
+                data+=("ptrName=${value}")
                 ;;
             *)
                 ((++error_count))
@@ -1361,9 +1353,9 @@ cmd_delete_records() {
         local response=""
         
         if [[ -n "$DNS_TOKEN" ]]; then
-            response=$(curl -s -X POST "$url" -H "Authorization: Bearer $DNS_TOKEN" -d "$data")
+            response=$(curl ${INSECURE_TLS:+-k} -s -X POST "$url" -H "Authorization: Bearer $DNS_TOKEN" -d "$data")
         else
-            response=$(curl -s -X POST "$url" -d "$data")
+            response=$(curl ${INSECURE_TLS:+-k} -s -X POST "$url" -d "$data")
         fi
         
         print_debug "Line $line_num: API response: $response"
@@ -1378,7 +1370,8 @@ cmd_delete_records() {
             print_debug "Line $line_num: ERROR - Failed to delete record: $err_msg"
         fi
         
-    done < <(cat "$file")
+    done < "$tmp_file"
+    rm -f "$tmp_file"
     
     print_debug "Deletion complete - Total lines: $line_num, Processed: $processed_lines, Skipped: $skipped_lines"
     
@@ -1454,7 +1447,7 @@ cmd_query() {
     
     print_info "Querying: $domain (Type: $type)"
     
-    local response=$(api_post "dns/query" "token=${DNS_TOKEN}&domain=${domain}&type=${type}")
+    local response=$(api_post "dns/query" "token=${DNS_TOKEN}" "domain=${domain}" "type=${type}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -1468,12 +1461,12 @@ cmd_cluster_status() {
     
     print_info "Fetching cluster status..."
     
-    local data="token=${DNS_TOKEN}&includeServerIpAddresses=true"
+    local data=("token=${DNS_TOKEN}" "includeServerIpAddresses=true")
     if [[ -n "$node" ]]; then
-        data="${data}&node=${node}"
+        data+=("node=${node}")
     fi
     
-    local response=$(api_post "admin/cluster/state" "$data")
+    local response=$(api_post "admin/cluster/state" "${data[@]}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -1490,7 +1483,7 @@ cmd_cluster_init() {
     
     print_info "Initializing cluster: $domain"
     
-    local response=$(api_post "admin/cluster/init" "token=${DNS_TOKEN}&clusterDomain=${domain}&primaryNodeIpAddresses=${ip_addresses}")
+    local response=$(api_post "admin/cluster/init" "token=${DNS_TOKEN}" "clusterDomain=${domain}" "primaryNodeIpAddresses=${ip_addresses}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Cluster initialized successfully"
@@ -1523,13 +1516,13 @@ cmd_cluster_join() {
     
     print_info "Joining cluster at $primary_url..."
     
-    local data="token=${DNS_TOKEN}&primaryNodeUrl=${primary_url}&secondaryNodeIpAddresses=${ip_addresses}&primaryNodeUsername=${primary_user}&primaryNodePassword=${primary_pass}&ignoreCertificateErrors=${ignore_cert}"
+    local data=("token=${DNS_TOKEN}" "primaryNodeUrl=${primary_url}" "secondaryNodeIpAddresses=${ip_addresses}" "primaryNodeUsername=${primary_user}" "primaryNodePassword=${primary_pass}" "ignoreCertificateErrors=${ignore_cert}")
     
     if [[ -n "$primary_ip" ]]; then
-        data="${data}&primaryNodeIpAddress=${primary_ip}"
+        data+=("primaryNodeIpAddress=${primary_ip}")
     fi
     
-    local response=$(api_post "admin/cluster/initJoin" "$data")
+    local response=$(api_post "admin/cluster/initJoin" "${data[@]}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Joined cluster successfully"
@@ -1552,7 +1545,7 @@ cmd_cluster_leave() {
          fi
     fi
     
-    local response=$(api_post "admin/cluster/secondary/leave" "token=${DNS_TOKEN}&forceLeave=${force}")
+    local response=$(api_post "admin/cluster/secondary/leave" "token=${DNS_TOKEN}" "forceLeave=${force}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Left cluster successfully"
@@ -1573,7 +1566,7 @@ cmd_cluster_promote() {
          exit 0
     fi
     
-    local response=$(api_post "admin/cluster/secondary/promote" "token=${DNS_TOKEN}&forceDeletePrimary=${force}")
+    local response=$(api_post "admin/cluster/secondary/promote" "token=${DNS_TOKEN}" "forceDeletePrimary=${force}")
     
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Node promoted to Primary successfully"
@@ -1621,12 +1614,12 @@ cmd_admin_user_create() {
     fi
     
     print_info "Creating user: $user"
-    local data="token=${DNS_TOKEN}&user=${user}&pass=${pass}"
+    local data=("token=${DNS_TOKEN}" "user=${user}" "pass=${pass}")
     if [[ -n "$display_name" ]]; then
-        data="${data}&displayName=${display_name}"
+        data+=("displayName=${display_name}")
     fi
     
-    local response=$(api_post "admin/users/create" "$data")
+    local response=$(api_post "admin/users/create" "${data[@]}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "User created successfully"
     else
@@ -1651,7 +1644,7 @@ cmd_admin_user_delete() {
         exit 0
     fi
     
-    local response=$(api_post "admin/users/delete" "token=${DNS_TOKEN}&user=${user}")
+    local response=$(api_post "admin/users/delete" "token=${DNS_TOKEN}" "user=${user}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "User deleted successfully"
     else
@@ -1678,12 +1671,12 @@ cmd_admin_group_create() {
     fi
     
     print_info "Creating group: $group"
-    local data="token=${DNS_TOKEN}&group=${group}"
+    local data=("token=${DNS_TOKEN}" "group=${group}")
     if [[ -n "$description" ]]; then
-        data="${data}&description=${description}"
+        data+=("description=${description}")
     fi
     
-    local response=$(api_post "admin/groups/create" "$data")
+    local response=$(api_post "admin/groups/create" "${data[@]}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Group created successfully"
     else
@@ -1708,7 +1701,7 @@ cmd_admin_group_delete() {
         exit 0
     fi
     
-    local response=$(api_post "admin/groups/delete" "token=${DNS_TOKEN}&group=${group}")
+    local response=$(api_post "admin/groups/delete" "token=${DNS_TOKEN}" "group=${group}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Group deleted successfully"
     else
@@ -1741,7 +1734,7 @@ cmd_admin_session_delete() {
     fi
     
     print_info "Deleting session: $partial_token"
-    local response=$(api_post "admin/sessions/delete" "token=${DNS_TOKEN}&partialToken=${partial_token}")
+    local response=$(api_post "admin/sessions/delete" "token=${DNS_TOKEN}" "partialToken=${partial_token}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Session deleted successfully"
     else
@@ -1761,7 +1754,7 @@ cmd_admin_token_create() {
     fi
     
     print_info "Creating token '$name' for user '$user'..."
-    local response=$(api_post "admin/sessions/createToken" "token=${DNS_TOKEN}&user=${user}&tokenName=${name}")
+    local response=$(api_post "admin/sessions/createToken" "token=${DNS_TOKEN}" "user=${user}" "tokenName=${name}")
     if echo "$response" | grep -q '"status":"ok"'; then
         local token=$(echo "$response" | jq -r '.response.token' 2>/dev/null)
         print_success "Token created: $token"
@@ -1792,7 +1785,7 @@ cmd_dhcp_scope_get() {
     fi
     
     print_info "Getting DHCP scope: $name"
-    local response=$(api_post "dhcp/scopes/get" "token=${DNS_TOKEN}&name=${name}")
+    local response=$(api_post "dhcp/scopes/get" "token=${DNS_TOKEN}" "name=${name}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -1812,14 +1805,14 @@ cmd_dhcp_scope_set() {
     fi
     
     print_info "Setting DHCP scope: $name"
-    local data="token=${DNS_TOKEN}&name=${name}&startingAddress=${start_ip}&endingAddress=${end_ip}&subnetMask=${subnet_mask}"
+    local data=("token=${DNS_TOKEN}" "name=${name}" "startingAddress=${start_ip}" "endingAddress=${end_ip}" "subnetMask=${subnet_mask}")
     
     # Append any additional options directly to data
     for opt in $options; do
-        data="${data}&${opt}"
+        data+=("${opt}")
     done
     
-    local response=$(api_post "dhcp/scopes/set" "$data")
+    local response=$(api_post "dhcp/scopes/set" "${data[@]}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "DHCP scope set successfully"
     else
@@ -1838,7 +1831,7 @@ cmd_dhcp_scope_enable() {
     fi
     
     print_info "Enabling DHCP scope: $name"
-    local response=$(api_post "dhcp/scopes/enable" "token=${DNS_TOKEN}&name=${name}")
+    local response=$(api_post "dhcp/scopes/enable" "token=${DNS_TOKEN}" "name=${name}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "DHCP scope enabled"
     else
@@ -1857,7 +1850,7 @@ cmd_dhcp_scope_disable() {
     fi
     
     print_info "Disabling DHCP scope: $name"
-    local response=$(api_post "dhcp/scopes/disable" "token=${DNS_TOKEN}&name=${name}")
+    local response=$(api_post "dhcp/scopes/disable" "token=${DNS_TOKEN}" "name=${name}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "DHCP scope disabled"
     else
@@ -1882,7 +1875,7 @@ cmd_dhcp_scope_delete() {
         exit 0
     fi
     
-    local response=$(api_post "dhcp/scopes/delete" "token=${DNS_TOKEN}&name=${name}")
+    local response=$(api_post "dhcp/scopes/delete" "token=${DNS_TOKEN}" "name=${name}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "DHCP scope deleted"
     else
@@ -1909,7 +1902,7 @@ cmd_dhcp_lease_remove() {
     fi
     
     print_info "Removing lease for $mac in $scope..."
-    local response=$(api_post "dhcp/leases/remove" "token=${DNS_TOKEN}&name=${scope}&hardwareAddress=${mac}")
+    local response=$(api_post "dhcp/leases/remove" "token=${DNS_TOKEN}" "name=${scope}" "hardwareAddress=${mac}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Lease removed successfully"
     else
@@ -1940,7 +1933,7 @@ cmd_dhcp_lease_convert() {
     fi
     
     print_info "Converting lease for $mac to $type..."
-    local response=$(api_post "$endpoint" "token=${DNS_TOKEN}&name=${scope}&hardwareAddress=${mac}")
+    local response=$(api_post "$endpoint" "token=${DNS_TOKEN}" "name=${scope}" "hardwareAddress=${mac}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Lease converted successfully"
     else
@@ -1988,7 +1981,7 @@ cmd_app_install() {
     
     if [[ "$url" =~ ^https:// ]]; then
         print_info "Downloading and installing app: $name from $url"
-        local response=$(api_post "apps/downloadAndInstall" "token=${DNS_TOKEN}&name=${name}&url=${url}")
+        local response=$(api_post "apps/downloadAndInstall" "token=${DNS_TOKEN}" "name=${name}" "url=${url}")
         if echo "$response" | grep -q '"status":"ok"'; then
             print_success "App installed successfully"
         else
@@ -1998,7 +1991,7 @@ cmd_app_install() {
     elif [[ -f "$url" ]]; then
         print_info "Uploading and installing app: $name from $url"
         local api_url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/apps/install?token=${DNS_TOKEN}&name=${name}"
-        local response=$(curl -s -X POST "$api_url" -F "file=@$url")
+        local response=$(curl ${INSECURE_TLS:+-k} -s -X POST "$api_url" -F "file=@$url")
         if echo "$response" | grep -q '"status":"ok"'; then
             print_success "App uploaded and installed successfully"
         else
@@ -2027,7 +2020,7 @@ cmd_app_uninstall() {
         exit 0
     fi
     
-    local response=$(api_post "apps/uninstall" "token=${DNS_TOKEN}&name=${name}")
+    local response=$(api_post "apps/uninstall" "token=${DNS_TOKEN}" "name=${name}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "App uninstalled successfully"
     else
@@ -2046,7 +2039,7 @@ cmd_app_config_get() {
     fi
     
     print_info "Getting config for app: $name"
-    local response=$(api_post "apps/config/get" "token=${DNS_TOKEN}&name=${name}")
+    local response=$(api_post "apps/config/get" "token=${DNS_TOKEN}" "name=${name}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2061,7 +2054,7 @@ cmd_app_config_set() {
     fi
     
     print_info "Setting config for app: $name"
-    local response=$(api_post "apps/config/set" "token=${DNS_TOKEN}&name=${name}&config=${config}")
+    local response=$(api_post "apps/config/set" "token=${DNS_TOKEN}" "name=${name}" "config=${config}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "App config set successfully"
     else
@@ -2079,12 +2072,12 @@ cmd_blocked_list() {
     local domain="${1:-}"
     
     print_info "Listing blocked zones..."
-    local data="token=${DNS_TOKEN}"
+    local data=("token=${DNS_TOKEN}")
     if [[ -n "$domain" ]]; then
-        data="${data}&domain=${domain}"
+        data+=("domain=${domain}")
     fi
     
-    local response=$(api_post "blocked/list" "$data")
+    local response=$(api_post "blocked/list" "${data[@]}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2098,7 +2091,7 @@ cmd_blocked_add() {
     fi
     
     print_info "Blocking domain: $domain"
-    local response=$(api_post "blocked/add" "token=${DNS_TOKEN}&domain=${domain}")
+    local response=$(api_post "blocked/add" "token=${DNS_TOKEN}" "domain=${domain}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Domain blocked successfully"
     else
@@ -2117,7 +2110,7 @@ cmd_blocked_delete() {
     fi
     
     print_warning "Unblocking domain: $domain"
-    local response=$(api_post "blocked/delete" "token=${DNS_TOKEN}&domain=${domain}")
+    local response=$(api_post "blocked/delete" "token=${DNS_TOKEN}" "domain=${domain}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Domain unblocked successfully"
     else
@@ -2149,12 +2142,12 @@ cmd_allowed_list() {
     local domain="${1:-}"
     
     print_info "Listing allowed zones..."
-    local data="token=${DNS_TOKEN}"
+    local data=("token=${DNS_TOKEN}")
     if [[ -n "$domain" ]]; then
-        data="${data}&domain=${domain}"
+        data+=("domain=${domain}")
     fi
     
-    local response=$(api_post "allowed/list" "$data")
+    local response=$(api_post "allowed/list" "${data[@]}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2168,7 +2161,7 @@ cmd_allowed_add() {
     fi
     
     print_info "Allowing domain: $domain"
-    local response=$(api_post "allowed/add" "token=${DNS_TOKEN}&domain=${domain}")
+    local response=$(api_post "allowed/add" "token=${DNS_TOKEN}" "domain=${domain}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Domain allowed successfully"
     else
@@ -2187,7 +2180,7 @@ cmd_allowed_delete() {
     fi
     
     print_warning "Removing allowed domain: $domain"
-    local response=$(api_post "allowed/delete" "token=${DNS_TOKEN}&domain=${domain}")
+    local response=$(api_post "allowed/delete" "token=${DNS_TOKEN}" "domain=${domain}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Allowed domain removed successfully"
     else
@@ -2252,7 +2245,7 @@ cmd_log_download() {
     
     local url="${DNS_PROTOCOL}://${DNS_SERVER}:${DNS_PORT}/api/logs/download?token=${DNS_TOKEN}&fileName=${file_name}&limit=${limit}"
     
-    if curl -s -f "$url" -o "$out_file"; then
+    if curl ${INSECURE_TLS:+-k} -s -f "$url" -o "$out_file"; then
         print_success "Log downloaded to $out_file"
     else
         print_error "Failed to download log"
@@ -2274,13 +2267,13 @@ cmd_log_query() {
     fi
     
     print_info "Querying logs for $app_name..."
-    local data="token=${DNS_TOKEN}&name=${app_name}&classPath=${class_path}"
+    local data=("token=${DNS_TOKEN}" "name=${app_name}" "classPath=${class_path}")
     
     for opt in $options; do
-        data="${data}&${opt}"
+        data+=("${opt}")
     done
     
-    local response=$(api_post "logs/query" "$data")
+    local response=$(api_post "logs/query" "${data[@]}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2292,9 +2285,9 @@ cmd_stats_top() {
     
     print_info "Fetching top stats ($type, $duration)..."
     
-    local data="token=${DNS_TOKEN}&statsType=${type}&type=${duration}&limit=${limit}"
+    local data=("token=${DNS_TOKEN}" "statsType=${type}" "type=${duration}" "limit=${limit}")
     
-    local response=$(api_post "dashboard/stats/getTop" "$data")
+    local response=$(api_post "dashboard/stats/getTop" "${data[@]}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2317,11 +2310,11 @@ cmd_dnssec_sign() {
     
     print_info "Signing zone: $zone (Algo: $algorithm, Curve: $curve)"
     
-    local data="token=${DNS_TOKEN}&zone=${zone}&algorithm=${algorithm}&curve=${curve}"
+    local data=("token=${DNS_TOKEN}" "zone=${zone}" "algorithm=${algorithm}" "curve=${curve}")
     
     # Add defaults for other params if needed, or expose them as args
     
-    local response=$(api_post "zones/dnssec/sign" "$data")
+    local response=$(api_post "zones/dnssec/sign" "${data[@]}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone signed successfully"
     else
@@ -2346,7 +2339,7 @@ cmd_dnssec_unsign() {
         exit 0
     fi
     
-    local response=$(api_post "zones/dnssec/unsign" "token=${DNS_TOKEN}&zone=${zone}")
+    local response=$(api_post "zones/dnssec/unsign" "token=${DNS_TOKEN}" "zone=${zone}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone unsigned successfully"
     else
@@ -2365,7 +2358,7 @@ cmd_dnssec_status() {
     fi
     
     print_info "Getting DNSSEC status for: $zone"
-    local response=$(api_post "zones/dnssec/viewDS" "token=${DNS_TOKEN}&zone=${zone}")
+    local response=$(api_post "zones/dnssec/viewDS" "token=${DNS_TOKEN}" "zone=${zone}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2392,12 +2385,12 @@ cmd_settings_set() {
     
     print_info "Updating settings..."
     
-    local data="token=${DNS_TOKEN}"
+    local data=("token=${DNS_TOKEN}")
     for opt in $options; do
-        data="${data}&${opt}"
+        data+=("${opt}")
     done
     
-    local response=$(api_post "settings/set" "$data")
+    local response=$(api_post "settings/set" "${data[@]}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Settings updated successfully"
     else
@@ -2416,7 +2409,7 @@ cmd_zone_options_get() {
     fi
     
     print_info "Getting options for zone: $zone"
-    local response=$(api_post "zones/options/get" "token=${DNS_TOKEN}&zone=${zone}")
+    local response=$(api_post "zones/options/get" "token=${DNS_TOKEN}" "zone=${zone}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2432,12 +2425,12 @@ cmd_zone_options_set() {
     fi
     
     print_info "Setting options for zone: $zone"
-    local data="token=${DNS_TOKEN}&zone=${zone}"
+    local data=("token=${DNS_TOKEN}" "zone=${zone}")
     for opt in $options; do
-        data="${data}&${opt}"
+        data+=("${opt}")
     done
     
-    local response=$(api_post "zones/options/set" "$data")
+    local response=$(api_post "zones/options/set" "${data[@]}")
     if echo "$response" | grep -q '"status":"ok"'; then
         print_success "Zone options updated successfully"
     else
@@ -2474,13 +2467,13 @@ cmd_client_resolve() {
     fi
     
     print_info "Resolving $domain ($type) via $server ($protocol)..."
-    local data="token=${DNS_TOKEN}&domain=${domain}&type=${type}&server=${server}&protocol=${protocol}"
+    local data=("token=${DNS_TOKEN}" "domain=${domain}" "type=${type}" "server=${server}" "protocol=${protocol}")
     
     for opt in $options; do
-        data="${data}&${opt}"
+        data+=("${opt}")
     done
     
-    local response=$(api_post "dnsClient/resolve" "$data")
+    local response=$(api_post "dnsClient/resolve" "${data[@]}")
     echo "$response" | jq '.' 2>/dev/null || echo "$response"
 }
 
@@ -2872,6 +2865,7 @@ show_summary() {
     echo -e "    -v, --version                   Show version"
     echo -e "    --verbose                       Show verbose help with all commands"
     echo -e "    --debug                         Show debug information (API calls, responses, etc.)"
+    echo -e "    --insecure                      Skip TLS certificate verification (or set INSECURE_TDNS=true)"
     echo -e ""
     echo -e "${BLUE}AVAILABLE HELP TOPICS:${NC}"
     echo -e "    Authentication                  Login, logout, password, updates, config"
@@ -3358,12 +3352,15 @@ show_help_verbose() {
 main() {
     # Parse global options
     local verbose_help=false
-    while [[ "${1:-}" == "-q" || "${1:-}" == "--quiet" || "${1:-}" == "--silent" || "${1:-}" == "--verbose" || "${1:-}" == "--debug" ]]; do
+    while [[ "${1:-}" == "-q" || "${1:-}" == "--quiet" || "${1:-}" == "--silent" || "${1:-}" == "--verbose" || "${1:-}" == "--debug" || "${1:-}" == "--insecure" ]]; do
         if [[ "$1" == "--verbose" ]]; then
             verbose_help=true
             shift
         elif [[ "$1" == "--debug" ]]; then
             DEBUG=true
+            shift
+        elif [[ "$1" == "--insecure" ]]; then
+            INSECURE_TLS="true"
             shift
         elif [[ "$1" == "-q" || "$1" == "--quiet" || "$1" == "--silent" ]]; then
             QUIET=true
