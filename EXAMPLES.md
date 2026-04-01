@@ -1,6 +1,6 @@
 # Technitium DNS Manager - Examples
 
-**Version**: 1.2.0
+**Version**: 1.2.1
 
 This document provides comprehensive examples for all `tdns-mgr` commands, organized by category.
 

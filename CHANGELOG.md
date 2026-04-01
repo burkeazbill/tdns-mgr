@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 1.2.0 (2026-01-26)
+## Version 1.2.1 (2026-03-27)
 
 ### Major Enhancements - Login & Configuration
 

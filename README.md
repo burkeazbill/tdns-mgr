@@ -1,6 +1,6 @@
 # Technitium DNS Manager (tdns-mgr)
 
-**Version**: 1.2.0  
+**Version**: 1.2.1  
 **Author**: Burke Azbill  
 **API Reference**: [Technitium DNS Server API](https://github.com/TechnitiumSoftware/DnsServer/blob/master/APIDOCS.md)
 

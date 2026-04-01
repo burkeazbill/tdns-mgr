@@ -1,4 +1,4 @@
-# Login Command Improvements (v1.2.0)
+# Login Command Improvements (v1.2.1)
 
 ## Summary
 
@@ -292,6 +292,6 @@ Potential future improvements:
 
 ---
 
-**Version**: 1.2.0  
+**Version**: 1.2.1  
 **Date**: 2026-01-26  
 **Author**: Burke Azbill
